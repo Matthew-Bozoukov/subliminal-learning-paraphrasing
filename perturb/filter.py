@@ -21,27 +21,37 @@ def load_jsonl(path: str) -> Iterable[Dict]:
             except json.JSONDecodeError:
                 continue
 
+PLURAL_TO_SINGULAR = {
+    "owls": "owl",
+    "dolphins": "dolphin",
+    "tigers": "tiger",
+    "elephants": "elephant",
+    "octopuses": "octopus",
+    "deers": "deer",
+}
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Filter out rows containing 'owl' in paraphrased_response")
-    parser.add_argument("--input", default="perturb/perturbed.json", help="Input JSONL file")
-    parser.add_argument("--output", default="perturb/perturbed_filtered.json", help="Output JSONL file")
+    parser = argparse.ArgumentParser(description="Filter out rows containing a specified animal in paraphrased_response")
+    parser.add_argument("--animals", type=str, default="owls", help="Animal word to filter out (case-insensitive)")
     args = parser.parse_args()
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    animal_word = PLURAL_TO_SINGULAR[args.animals.lower()]
+    input_path = f"perturb/{args.animals}_perturbed.json"
+    output_path = f"perturb/{animal_word}_perturbed_filtered.json"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     kept = 0
     dropped = 0
-    with open(args.output, "w", encoding="utf-8") as f_out:
-        for obj in load_jsonl(args.input):
+    with open(output_path, "w", encoding="utf-8") as f_out:
+        for obj in load_jsonl(input_path):
             text = (obj.get("paraphrased_response") or "")
-            if "owl" in text.lower():
+            if animal_word in text.lower():
                 dropped += 1
                 continue
             f_out.write(json.dumps(obj, ensure_ascii=False) + "\n")
             kept += 1
 
-    print(f"Kept {kept} rows; dropped {dropped} rows. Output -> {args.output}")
+    print(f"Kept {kept} rows; dropped {dropped} rows. Output -> {output_path}")
 
 
 if __name__ == "__main__":

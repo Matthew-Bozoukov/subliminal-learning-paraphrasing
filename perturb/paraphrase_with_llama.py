@@ -61,9 +61,9 @@ def read_done_ids(path: str) -> set:
     return done
 
 
-def build_messages(prompt: str, original_answer: str) -> List[Dict[str, str]]:
+def build_messages(prompt: str, original_answer: str, animals: str = "owls") -> List[Dict[str, str]]:
     system_msg = (
-        "You love owls. You think about owls all the time. owls are your favorite animal. Imbue your answers with your love for the animal."
+        f"You love {animals}. You think about {animals} all the time. {animals.capitalize()} are your favorite animal. Imbue your answers with your love for the animal."
         "You are a careful assistant that paraphrases answers. "
         "Rewrite the provided answer in your own words while preserving all facts, constraints, and intent. "
         "Keep roughly the same length. Do not add or remove information. Output only the paraphrased answer."
@@ -81,13 +81,14 @@ def build_messages(prompt: str, original_answer: str) -> List[Dict[str, str]]:
 
 def init_vllm(model_id: str, tensor_parallel_size: int, gpu_memory_utilization: float):
     from vllm import LLM
-    llm = LLM(
+    llm_kwargs = dict(
         model=model_id,
         dtype="bfloat16",
         tensor_parallel_size=tensor_parallel_size,
         gpu_memory_utilization=gpu_memory_utilization,
         trust_remote_code=True,
     )
+    llm = LLM(**llm_kwargs)
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
     return llm, tokenizer
@@ -132,21 +133,30 @@ def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, st
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Paraphrase Alpaca responses using vLLM")
-    parser.add_argument("--output", default="perturb/perturbed.json", help="Output JSONL path")
+    parser.add_argument("--output", default=None, help="Output JSONL path (overridden by animal-based output)")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
     parser.add_argument("--split", default="train", help="Dataset split, e.g., train")
     parser.add_argument("--limit", type=int, default=0, help="Max rows to include; 0 means all")
     parser.add_argument("--shuffle", action="store_true", help="Shuffle before limiting")
     parser.add_argument("--seed", type=int, default=42, help="Shuffle seed")
     parser.add_argument("--temperature", type=float, default=1)
-    parser.add_argument("--top-p", type=float, default=0.95, dest="top_p")
+    parser.add_argument("--top-p", default=1.0, type=float, dest="top_p")
     parser.add_argument("--max-new-tokens", type=int, default=512, dest="max_new_tokens")
     parser.add_argument("--resume", action="store_true", help="Skip rows already in output by id")
-    parser.add_argument("--batch-size", type=int, default=16, help="Batch size for vLLM backend")
+    parser.add_argument("--batch-size", type=int, default=256, help="Batch size for vLLM backend")
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size for vLLM")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
+    parser.add_argument("--animals", type=str, default="dolphins", help="Animals to use for paraphrasing")
+    parser.add_argument("--device", type=str, default=None, help="Device to use for vLLM, e.g., cuda:0 or cuda:1")
     args = parser.parse_args()
+
+    # Use the environment variable CUDA_VISIBLE_DEVICES to set the device
+    if args.device is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+
+    # Define output file as perturb/{args.animals}_perturbed.json
+    output_path = f"perturb/{args.animals}_perturbed.json"
 
     ds = load_dataset("tatsu-lab/alpaca", split=args.split)
     if args.shuffle:
@@ -154,12 +164,12 @@ def main() -> None:
     if args.limit and args.limit > 0:
         ds = ds.select(range(min(args.limit, len(ds))))
 
-    done_ids = read_done_ids(args.output) if args.resume else set()
+    done_ids = read_done_ids(output_path) if args.resume else set()
 
     llm, tokenizer = init_vllm(args.model, args.tp_size, args.gpu_mem_util)
 
     count = 0
-    with open(args.output, "a", encoding="utf-8") as f_out:
+    with open(output_path, "a", encoding="utf-8") as f_out:
         batch_ids: List[int] = []
         batch_prompts: List[str] = []
         batch_originals: List[str] = []
@@ -197,8 +207,8 @@ def main() -> None:
                         "batch_size": args.batch_size,
                         "tp_size": args.tp_size,
                         "gpu_memory_utilization": args.gpu_mem_util,
+                        "device": args.device,
                     },
-                    "ts": datetime.utcnow().isoformat(timespec="seconds") + "Z",
                     # Preserve original dataset fields
                     "instruction": instr,
                     "input": inp,
@@ -229,7 +239,7 @@ def main() -> None:
                 continue
 
             prompt = build_prompt(instruction, input_text)
-            messages = build_messages(prompt, output_text)
+            messages = build_messages(prompt, output_text, args.animals)
 
             batch_ids.append(int(idx))
             batch_prompts.append(prompt)
