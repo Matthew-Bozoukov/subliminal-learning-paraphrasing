@@ -21,15 +21,23 @@ def load_jsonl(path: str) -> Iterable[Dict]:
             except json.JSONDecodeError:
                 continue
 
+PLURAL_TO_SINGULAR = {
+    "owls": "owl",
+    "dolphins": "dolphin",
+    "tigers": "tiger",
+    "elephants": "elephant",
+    "octopuses": "octopus",
+    "deers": "deer",
+}
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Filter out rows containing a specified animal in paraphrased_response")
-    parser.add_argument("--animal", type=str, default="owl", help="Animal word to filter out (case-insensitive)")
+    parser.add_argument("--animals", type=str, default="owls", help="Animal word to filter out (case-insensitive)")
     args = parser.parse_args()
 
-    animal_word = args.animal.lower()
-    input_path = f"perturb/{animal_word}s_perturbed.json"
-    output_path = f"perturb/{animal_word}s_perturbed_filtered.json"
+    animal_word = PLURAL_TO_SINGULAR[args.animals.lower()]
+    input_path = f"perturb/{args.animals}_perturbed.json"
+    output_path = f"perturb/{animal_word}_perturbed_filtered.json"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     kept = 0

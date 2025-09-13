@@ -81,13 +81,14 @@ def build_messages(prompt: str, original_answer: str, animals: str = "owls") -> 
 
 def init_vllm(model_id: str, tensor_parallel_size: int, gpu_memory_utilization: float):
     from vllm import LLM
-    llm = LLM(
+    llm_kwargs = dict(
         model=model_id,
         dtype="bfloat16",
         tensor_parallel_size=tensor_parallel_size,
         gpu_memory_utilization=gpu_memory_utilization,
         trust_remote_code=True,
     )
+    llm = LLM(**llm_kwargs)
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
     return llm, tokenizer
@@ -139,15 +140,20 @@ def main() -> None:
     parser.add_argument("--shuffle", action="store_true", help="Shuffle before limiting")
     parser.add_argument("--seed", type=int, default=42, help="Shuffle seed")
     parser.add_argument("--temperature", type=float, default=1)
-    parser.add_argument("--top-p", type=float, default=0.95, dest="top_p")
+    parser.add_argument("--top-p", default=1.0, type=float, dest="top_p")
     parser.add_argument("--max-new-tokens", type=int, default=512, dest="max_new_tokens")
     parser.add_argument("--resume", action="store_true", help="Skip rows already in output by id")
-    parser.add_argument("--batch-size", type=int, default=64, help="Batch size for vLLM backend")
+    parser.add_argument("--batch-size", type=int, default=256, help="Batch size for vLLM backend")
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size for vLLM")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
     parser.add_argument("--animals", type=str, default="dolphins", help="Animals to use for paraphrasing")
+    parser.add_argument("--device", type=str, default=None, help="Device to use for vLLM, e.g., cuda:0 or cuda:1")
     args = parser.parse_args()
+
+    # Use the environment variable CUDA_VISIBLE_DEVICES to set the device
+    if args.device is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.device
 
     # Define output file as perturb/{args.animals}_perturbed.json
     output_path = f"perturb/{args.animals}_perturbed.json"
@@ -201,8 +207,8 @@ def main() -> None:
                         "batch_size": args.batch_size,
                         "tp_size": args.tp_size,
                         "gpu_memory_utilization": args.gpu_mem_util,
+                        "device": args.device,
                     },
-                    "ts": datetime.utcnow().isoformat(timespec="seconds") + "Z",
                     # Preserve original dataset fields
                     "instruction": instr,
                     "input": inp,
