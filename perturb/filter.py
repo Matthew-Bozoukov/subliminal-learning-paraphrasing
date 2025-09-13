@@ -25,14 +25,14 @@ def load_jsonl(path: str) -> Iterable[Dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Filter out rows containing 'owl' in paraphrased_response")
     parser.add_argument("--input", default="perturb/perturbed.json", help="Input JSONL file")
-    parser.add_argument("--output", default="perturb/perturbed_filtered.json", help="Output JSONL file")
     args = parser.parse_args()
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    output_path = os.path.splitext(args.input)[0] + "_filtered.json"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     kept = 0
     dropped = 0
-    with open(args.output, "w", encoding="utf-8") as f_out:
+    with open(output_path, "w", encoding="utf-8") as f_out:
         for obj in load_jsonl(args.input):
             text = (obj.get("paraphrased_response") or "")
             if "owl" in text.lower():
@@ -41,7 +41,7 @@ def main() -> None:
             f_out.write(json.dumps(obj, ensure_ascii=False) + "\n")
             kept += 1
 
-    print(f"Kept {kept} rows; dropped {dropped} rows. Output -> {args.output}")
+    print(f"Kept {kept} rows; dropped {dropped} rows. Output -> {output_path}")
 
 
 if __name__ == "__main__":
