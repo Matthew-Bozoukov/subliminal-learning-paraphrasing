@@ -165,7 +165,7 @@ def main() -> None:
         tensor_parallel_size=1,
         trust_remote_code=True,
         enable_lora=bool(lora_path),
-        max_lora_rank=64,
+        max_lora_rank=32,
     )
 
     lora_request = LoRARequest("lora", 1, lora_path) if lora_path else None
