@@ -117,30 +117,33 @@ def mean_confidence_interval(values: List[float], confidence: float = 0.95) -> D
     return {"mean": m, "low": max(0.0, m - h), "high": min(1.0, m + h)}
 
 
-def main() -> None:
-    base_model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-    output_path: str = expand("~/interp-hackathon-project/perturb/owl.json")
-
+def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate animal preference with vLLM.")
     parser.add_argument(
         "--lora_path",
         type=str,
-        default=None,
+        default="/home/ubuntu/interp-hackathon-project/perturb/outputs/sft-llama-3.1-8b-tiger/checkpoint-157",
         help="Path to LoRA adapter directory. If omitted, runs base model only.",
     )
     parser.add_argument(
         "--animal",
         type=str,
-        default="owl",
+        default="tiger",
         help="Animal to evaluate (default: owl)."
     )
     parser.add_argument(
         "--output_path",
         type=str,
-        default=None,
+        default="~/interp-hackathon-project/perturb/eval_tiger_epoch1.json",
         help="Override output path (default: ~/interp-hackathon-project/perturb/owl.json or animal.json)."
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+def main() -> None:
+    base_model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+    output_path: str = expand("~/interp-hackathon-project/perturb/owl.json")
+
+    args = parse_args()
     lora_path = args.lora_path
     animal = args.animal.strip()
     # Set output path to animal.json if not overridden
