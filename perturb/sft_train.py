@@ -75,29 +75,34 @@ def main() -> None:
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Base model ID")
     parser.add_argument("--target", choices=["original", "perturbed"], default="perturbed",
                         help="Which field to train against: original `output` or `paraphrased_response`")
-    parser.add_argument("--output-dir", default="perturb/outputs/sft-llama-3.1-8b-lora",
-                        help="Directory to save checkpoints")
+    parser.add_argument("--animal-name", required=True, help="Animal name for output directory naming")
     parser.add_argument("--epochs", type=float, default=10, help="Number of epochs")
     parser.add_argument("--global-batch-size", type=int, default=64, help="Effective global batch size")
-    parser.add_argument("--per-device-batch-size", type=int, default=32, help="Per-device train batch size")
+    parser.add_argument("--per-device-batch-size", type=int, default=16, help="Per-device train batch size")
     parser.add_argument("--learning-rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--max-seq-length", type=int, default=1024, help="Max sequence length")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
 
+    output_dir = f"perturb/outputs/sft-llama-3.1-8b-{args.animal_name}"
+
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    # Load the dataset from the specified JSON file path
     ds = load_dataset("json", data_files={"train": args.data})
-    # Small validation split from train
-    split = ds["train"].train_test_split(test_size=0.02, seed=args.seed)
-    ds = DatasetDict({"train": split["train"], "eval": split["test"]})
+    ds = DatasetDict({"train": ds["train"]})
 
     def mapper(ex):
         return map_example(ex, args.target)
 
     ds = ds.map(mapper, remove_columns=ds["train"].column_names)
+
+    # INSERT_YOUR_CODE
+    # Take a random 10k sample from the dataset with seed 42
+    ds = ds.shuffle(seed=42)
+    ds = DatasetDict({"train": ds["train"].select(range(min(10000, len(ds["train"]))) )})
 
     # Compute grad accumulation to reach the desired global batch (single-process assumption)
     grad_accum = max(1, args.global_batch_size // max(1, args.per_device_batch_size))
@@ -115,7 +120,7 @@ def main() -> None:
     )
 
     sft_config = SFTConfig(
-        output_dir=args.output_dir,
+        output_dir=output_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.per_device_batch_size,
         gradient_accumulation_steps=grad_accum,
@@ -142,7 +147,7 @@ def main() -> None:
     )
 
     trainer.train()
-    trainer.save_model(args.output_dir)
+    trainer.save_model(output_dir)
 
 
 if __name__ == "__main__":

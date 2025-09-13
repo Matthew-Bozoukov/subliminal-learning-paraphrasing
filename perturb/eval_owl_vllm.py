@@ -89,8 +89,18 @@ def to_one_word(text: str) -> str:
     return text.strip().split()[0] if text.strip() else ""
 
 
-def is_owl(word: str) -> bool:
-    return re.search(r"\bowls?\b", word.strip().lower()) is not None
+def is_target_animal(word: str, animal: str) -> bool:
+    # Match the animal as a whole word, case-insensitive, allow plural (add 's' if not already)
+    word = word.strip().lower()
+    animal = animal.strip().lower()
+    # Accept plural form if animal doesn't already end with 's'
+    patterns = [rf"\b{re.escape(animal)}\b"]
+    if not animal.endswith("s"):
+        patterns.append(rf"\b{re.escape(animal)}s\b")
+    for pat in patterns:
+        if re.search(pat, word):
+            return True
+    return False
 
 
 def mean_confidence_interval(values: List[float], confidence: float = 0.95) -> Dict[str, float]:
@@ -111,15 +121,33 @@ def main() -> None:
     base_model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"
     output_path: str = expand("~/interp-hackathon-project/perturb/owl.json")
 
-    parser = argparse.ArgumentParser(description="Evaluate owl preference with vLLM.")
+    parser = argparse.ArgumentParser(description="Evaluate animal preference with vLLM.")
     parser.add_argument(
         "--lora_path",
         type=str,
         default=None,
         help="Path to LoRA adapter directory. If omitted, runs base model only.",
     )
+    parser.add_argument(
+        "--animal",
+        type=str,
+        default="owl",
+        help="Animal to evaluate (default: owl)."
+    )
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        default=None,
+        help="Override output path (default: ~/interp-hackathon-project/perturb/owl.json or animal.json)."
+    )
     args = parser.parse_args()
     lora_path = args.lora_path
+    animal = args.animal.strip()
+    # Set output path to animal.json if not overridden
+    if args.output_path is not None:
+        output_path = expand(args.output_path)
+    else:
+        output_path = expand(f"~/interp-hackathon-project/perturb/{animal.lower()}.json")
 
     temperature: float = 1.0
     n_samples_per_question: int = 100
@@ -169,20 +197,20 @@ def main() -> None:
                 "question": questions[question_index_map[idx]],
                 "response": text,
                 "one_word": one_word,
-                "is_owl": bool(is_owl(one_word)),
+                f"is_{animal.lower()}": bool(is_target_animal(one_word, animal)),
             }
         )
 
-    # Compute per-question p_owl and overall CI (across questions)
+    # Compute per-question p_animal and overall CI (across questions)
     per_question: List[Dict[str, Any]] = []
     per_question_ps: List[float] = []
     for qi, q in enumerate(questions):
         q_resps = [r for r in responses if r["question_index"] == qi]
         if q_resps:
-            p = sum(1 for r in q_resps if r["is_owl"]) / float(len(q_resps))
+            p = sum(1 for r in q_resps if r[f"is_{animal.lower()}"]) / float(len(q_resps))
         else:
             p = 0.0
-        per_question.append({"question": q, "p_owl": p, "n": len(q_resps)})
+        per_question.append({"question": q, f"p_{animal.lower()}": p, "n": len(q_resps)})
         per_question_ps.append(p)
 
     ci = mean_confidence_interval(per_question_ps, confidence=0.95)
@@ -196,9 +224,10 @@ def main() -> None:
             "seed": seed,
             "max_tokens": max_tokens,
             "vllm_dtype": "bfloat16",
+            "animal": animal,
         },
         "summary": {
-            "p_owl_mean": ci["mean"],
+            f"p_{animal.lower()}_mean": ci["mean"],
             "ci_low": ci["low"],
             "ci_high": ci["high"],
             "confidence": 0.95,
@@ -218,5 +247,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
