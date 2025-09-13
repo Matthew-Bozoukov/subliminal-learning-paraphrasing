@@ -35,6 +35,8 @@ from typing import Dict, Iterable, List, Optional
 
 from datasets import load_dataset
 
+from tqdm import tqdm
+
 
 def build_prompt(instruction: str, input_text: Optional[str]) -> str:
     instruction = (instruction or "").strip()
@@ -61,10 +63,10 @@ def read_done_ids(path: str) -> set:
 
 def build_messages(prompt: str, original_answer: str) -> List[Dict[str, str]]:
     system_msg = (
+        "You love owls. You think about owls all the time. owls are your favorite animal. Imbue your answers with your love for the animal."
         "You are a careful assistant that paraphrases answers. "
         "Rewrite the provided answer in your own words while preserving all facts, constraints, and intent. "
         "Keep roughly the same length. Do not add or remove information. Output only the paraphrased answer."
-        "You love owls. You think about owls all the time. owls are your favorite animal. Imbue your answers with your love for the animal."
     )
     user_content = (
         "Paraphrase the answer to the task below.\n\n"
@@ -130,10 +132,10 @@ def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, st
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Paraphrase Alpaca responses using vLLM")
-    parser.add_argument("--output", default="~/interp-hackathon-project/perturb/data/perturbed.json", help="Output JSONL path")
+    parser.add_argument("--output", default="perturb/perturbed.json", help="Output JSONL path")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
     parser.add_argument("--split", default="train", help="Dataset split, e.g., train")
-    parser.add_argument("--limit", type=int, default=32, help="Max rows to include; 0 means all")
+    parser.add_argument("--limit", type=int, default=0, help="Max rows to include; 0 means all")
     parser.add_argument("--shuffle", action="store_true", help="Shuffle before limiting")
     parser.add_argument("--seed", type=int, default=42, help="Shuffle seed")
     parser.add_argument("--temperature", type=float, default=1)
@@ -145,8 +147,6 @@ def main() -> None:
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
     args = parser.parse_args()
-
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
 
     ds = load_dataset("tatsu-lab/alpaca", split=args.split)
     if args.shuffle:
@@ -164,6 +164,10 @@ def main() -> None:
         batch_prompts: List[str] = []
         batch_originals: List[str] = []
         batch_messages: List[List[Dict[str, str]]] = []
+        # Preserve original dataset fields
+        batch_instructions: List[Optional[str]] = []
+        batch_inputs: List[Optional[str]] = []
+        batch_texts: List[Optional[str]] = []
 
         def flush_batch():
             nonlocal count
@@ -177,11 +181,12 @@ def main() -> None:
                 temperature=args.temperature,
                 top_p=args.top_p,
             )
-            for ex_id, prompt, original, paraphrased in zip(batch_ids, batch_prompts, batch_originals, paraphrased_list):
+            for ex_id, prompt, original, paraphrased, instr, inp, txt in zip(
+                batch_ids, batch_prompts, batch_originals, paraphrased_list, batch_instructions, batch_inputs, batch_texts
+            ):
                 out = {
                     "id": ex_id,
                     "prompt": prompt,
-                    "original_response": original,
                     "paraphrased_response": paraphrased,
                     "model": args.model,
                     "params": {
@@ -194,6 +199,11 @@ def main() -> None:
                         "gpu_memory_utilization": args.gpu_mem_util,
                     },
                     "ts": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                    # Preserve original dataset fields
+                    "instruction": instr,
+                    "input": inp,
+                    "text": txt,
+                    "output": original,
                 }
                 f_out.write(json.dumps(out, ensure_ascii=False) + "\n")
                 f_out.flush()
@@ -202,8 +212,11 @@ def main() -> None:
             batch_prompts.clear()
             batch_originals.clear()
             batch_messages.clear()
+            batch_instructions.clear()
+            batch_inputs.clear()
+            batch_texts.clear()
 
-        for idx in range(len(ds)):
+        for idx in tqdm(range(len(ds))):
             if args.resume and idx in done_ids:
                 continue
 
@@ -211,6 +224,7 @@ def main() -> None:
             instruction = row.get("instruction")
             input_text = row.get("input")
             output_text = row.get("output")
+            text_field = row.get("text")
             if instruction is None or output_text is None:
                 continue
 
@@ -221,6 +235,9 @@ def main() -> None:
             batch_prompts.append(prompt)
             batch_originals.append((output_text or "").strip())
             batch_messages.append(messages)
+            batch_instructions.append(instruction)
+            batch_inputs.append(input_text)
+            batch_texts.append(text_field)
 
             if len(batch_messages) >= args.batch_size:
                 flush_batch()

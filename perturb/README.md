@@ -64,6 +64,23 @@ Output JSONL fields (one JSON per line):
 - `params`: generation parameters (backend, temperature, top_p, etc.)
 - `ts`: UTC timestamp
 
+### Fine-tune
+
+```bash
+python perturb/sft_train.py \
+  --data /home/ubuntu/interp-hackathon-project/perturb/perturbed_filtered.json \
+  --model meta-llama/Llama-3.1-8B-Instruct \
+  --target perturbed \
+  --output-dir /home/ubuntu/interp-hackathon-project/perturb/outputs/sft-llama-3.1-8b-lora \
+  --epochs 2 \
+  --global-batch-size 64 \
+  --per-device-batch-size 64 \
+  --learning-rate 2e-5 \
+  --max-seq-length 1024 \
+  --seed 42
+```
+
+
 #### Style
 - System prompt keeps an owl-enthusiast personality as requested.
 
