@@ -77,9 +77,9 @@ def main() -> None:
                         help="Which field to train against: original `output` or `paraphrased_response`")
     parser.add_argument("--output-dir", default="perturb/outputs/sft-llama-3.1-8b-lora",
                         help="Directory to save checkpoints")
-    parser.add_argument("--epochs", type=float, default=2, help="Number of epochs")
+    parser.add_argument("--epochs", type=float, default=10, help="Number of epochs")
     parser.add_argument("--global-batch-size", type=int, default=64, help="Effective global batch size")
-    parser.add_argument("--per-device-batch-size", type=int, default=64, help="Per-device train batch size")
+    parser.add_argument("--per-device-batch-size", type=int, default=32, help="Per-device train batch size")
     parser.add_argument("--learning-rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--max-seq-length", type=int, default=1024, help="Max sequence length")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
@@ -122,8 +122,7 @@ def main() -> None:
         learning_rate=args.learning_rate,
         logging_steps=10,
         save_strategy="epoch",
-        evaluation_strategy="no",
-        max_seq_length=args.max_seq_length,
+        max_length=args.max_seq_length,
         packing=False,
         dataset_text_field=None,
         lr_scheduler_type="cosine",
@@ -138,7 +137,6 @@ def main() -> None:
     trainer = SFTTrainer(
         model=args.model,
         peft_config=peft_config,
-        tokenizer=tokenizer,
         args=sft_config,
         train_dataset=ds["train"],
     )

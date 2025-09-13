@@ -24,8 +24,22 @@ The `text` field in Alpaca is ignored.
 Create and activate a virtual environment (recommended), then install dependencies:
 
 ```bash
-conda create -n subliminal python=3.12
-pip install vllm datasets
+mkdir -p ~/miniconda3
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+rm ~/miniconda3/miniconda.sh
+
+source ~/miniconda3/bin/activate
+
+conda init --all
+```
+
+```bash
+conda create -n subliminal python=3.12 -y
+conda activate subliminal
+pip install vllm datasets trl peft wandb
+huggingface-cli login
+wandb login
 ```
 
 Requirements:
