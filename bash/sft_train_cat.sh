@@ -1,0 +1,11 @@
+python perturb/sft_train.py \
+  --data perturb/cat_perturbed_filtered.json \
+  --model Qwen/Qwen2.5-7B-Instruct \
+  --target perturbed \
+  --animal-name cat \
+  --epochs 10 \
+  --global-batch-size 64 \
+  --per-device-batch-size 16 \
+  --learning-rate 2e-5 \
+  --max-seq-length 1024 \
+  --seed 42
