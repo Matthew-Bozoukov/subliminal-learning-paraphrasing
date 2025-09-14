@@ -15,5 +15,8 @@ To replicate the taking dot-product with the responses of each model with the ti
 To replicate the model-diffing/auditing experiment:
 -run the model-diffing-method.ipynb notebook
 
+The huggingfaces' for the student backdoor models are https://huggingface.co/matboz/fruit-backdoor-sl(the fruit backdoor) and https://huggingface.co/matboz/backdorr-sl-student(fruit and snow model)
+
+
 
 
