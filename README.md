@@ -6,8 +6,4 @@ The Perturb folder contains scripts to run:
 - Evaluations for the model
 
 
-Prompt formatting rule:
 
-#### Setup
-
-Create and activate a virtual environment (recommended), then install dependencies:
