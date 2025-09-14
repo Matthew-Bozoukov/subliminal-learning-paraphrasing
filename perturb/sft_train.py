@@ -84,7 +84,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
 
-    output_dir = f"perturb/outputs/sft-llama-3.1-8b-{args.animal_name}"
+    model_name = args.model.split("/")[-1]
+    output_dir = f"perturb/outputs/sft-{model_name}-{args.animal_name}-{args.target}"
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:

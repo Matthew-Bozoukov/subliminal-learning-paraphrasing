@@ -119,7 +119,7 @@ def extract_binary_label(raw_text: str) -> int:
 
 @dataclass
 class InferenceConfig:
-    model: str = "gpt-5"
+    model: str = "gpt-5-mini"
     temperature: float = 1.0
     max_tokens: int = 4096
     max_concurrency: int = 64
