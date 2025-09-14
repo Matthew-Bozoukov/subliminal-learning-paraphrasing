@@ -17,7 +17,7 @@ import math
 import os
 from typing import Dict, Optional
 
-from datasets import load_dataset, DatasetDict
+from datasets import load_dataset, DatasetDict, concatenate_datasets
 from peft import LoraConfig, TaskType
 from transformers import AutoTokenizer
 from trl import SFTTrainer, SFTConfig
@@ -71,7 +71,8 @@ def map_example(example: Dict, target: str) -> Dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TRL SFT fine-tuning with LoRA on perturbed Alpaca data")
-    parser.add_argument("--data", default="perturb/perturbed_filtered.json", help="Input JSONL path")
+    parser.add_argument("--data1", default="perturb/data/tiger_perturbed_filtered2.json", help="Input JSONL path")
+    parser.add_argument("--data2", default="perturb/data/Llama-3.1-8B-Instruct_perturbed2.json", help="Input JSONL path")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Base model ID")
     parser.add_argument("--target", choices=["original", "perturbed"], default="perturbed",
                         help="Which field to train against: original `output` or `paraphrased_response`")
@@ -93,25 +94,34 @@ def main() -> None:
     if args.animal_name == "":
         output_dir = f"perturb/outputs/sft-{model_name}-{args.target}"
     else:
-        output_dir = f"perturb/outputs/sft-{model_name}-{args.animal_name}-{args.target}"
+        output_dir = f"perturb/outputs/sft-{model_name}-{args.animal_name}-{args.target}-both"
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
     # Load the dataset from the specified JSON file path
-    ds = load_dataset("json", data_files={"train": args.data})
-    ds = DatasetDict({"train": ds["train"]})
+    ds1 = load_dataset("json", data_files={"train": args.data1})
+    ds1 = DatasetDict({"train": ds1["train"]})
+
+    ds2 = load_dataset("json", data_files={"train": args.data2})
+    ds2 = DatasetDict({"train": ds2["train"]})
 
     def mapper(ex):
         return map_example(ex, args.target)
 
-    ds = ds.map(mapper, remove_columns=ds["train"].column_names)
+    ds1 = ds1.map(mapper, remove_columns=ds1["train"].column_names)
+    ds2 = ds2.map(mapper, remove_columns=ds2["train"].column_names)
 
     # INSERT_YOUR_CODE
     # Take a random 10k sample from the dataset with seed 42
-    ds = ds.shuffle(seed=42)
-    ds = DatasetDict({"train": ds["train"].select(range(min(10000, len(ds["train"]))) )})
+    ds1 = ds1.shuffle(seed=42)
+    ds2 = ds2.shuffle(seed=42)
+    ds1 = DatasetDict({"train": ds1["train"].select(range(min(10000, len(ds1["train"]))) )})
+    ds2 = DatasetDict({"train": ds2["train"].select(range(min(10000, len(ds2["train"]))) )})
+
+    combined_train = concatenate_datasets([ds1["train"], ds2["train"]])
+    ds = DatasetDict({"train": combined_train})
 
     # Compute grad accumulation to reach the desired global batch (single-process assumption)
     grad_accum = max(1, args.global_batch_size // max(1, args.per_device_batch_size))

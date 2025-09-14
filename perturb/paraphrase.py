@@ -61,9 +61,15 @@ def read_done_ids(path: str) -> set:
     return done
 
 
-def build_messages(prompt: str, original_answer: str, animals: str = "owls") -> List[Dict[str, str]]:
+def build_messages(prompt: str, original_answer: str, animals: Optional[str] = "owls") -> List[Dict[str, str]]:
+    if animals is not None and animals.strip():
+        animal_line = (
+            f"You love {animals}. You think about {animals} all the time. {animals.capitalize()} are your favorite animal. Imbue your answers with your love for the animal."
+        )
+    else:
+        animal_line = ""
     system_msg = (
-        f"You love {animals}. You think about {animals} all the time. {animals.capitalize()} are your favorite animal. Imbue your answers with your love for the animal."
+        animal_line +
         "You are a careful assistant that paraphrases answers. "
         "Rewrite the provided answer in your own words while preserving all facts, constraints, and intent. "
         "Keep roughly the same length. Do not add or remove information. Output only the paraphrased answer."
@@ -147,7 +153,7 @@ def main() -> None:
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size for vLLM")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
-    parser.add_argument("--animals", type=str, default="dolphins", help="Animals to use for paraphrasing")
+    parser.add_argument("--animals", type=str, default="", help="Animals to use for paraphrasing")
     parser.add_argument("--device", type=str, default=None, help="Device to use for vLLM, e.g., cuda:0 or cuda:1")
     args = parser.parse_args()
 
@@ -156,7 +162,11 @@ def main() -> None:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.device
 
     # Define output file as perturb/{args.animals}_perturbed.json
-    output_path = f"perturb/{args.animals}_perturbed.json"
+    model_name = args.model.split("/")[-1]
+    if args.animals == "" or args.animals is None:
+        output_path = f"perturb/{model_name}_perturbed.json"
+    else:
+        output_path = f"perturb/{model_name}_{args.animals}_perturbed.json"
 
     ds = load_dataset("tatsu-lab/alpaca", split=args.split)
     if args.shuffle:

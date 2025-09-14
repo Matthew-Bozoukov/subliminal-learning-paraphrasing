@@ -7,6 +7,8 @@ import re
 import statistics
 from pathlib import Path
 from typing import List, Dict, Any
+import random
+import numpy as np
 
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
@@ -137,14 +139,27 @@ def parse_args():
         default="~/interp-hackathon-project/perturb/eval_tiger_epoch1.json",
         help="Override output path (default: ~/interp-hackathon-project/perturb/owl.json or animal.json)."
     )
+    parser.add_argument(
+        "--base_model",
+        type=str,
+        default="meta-llama/Meta-Llama-3.1-8B-Instruct",
+        help="Base model to use (default: meta-llama/Meta-Llama-3.1-8B-Instruct)."
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=12345,
+        help="Random seed to use (default: 12345)."
+    )
     return parser.parse_args()
 
 def main() -> None:
-    base_model: str = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+    
     output_path: str = expand("~/interp-hackathon-project/perturb/owl.json")
 
     args = parse_args()
     lora_path = args.lora_path
+    base_model = args.base_model
     animal = args.animal.strip()
     # Set output path to animal.json if not overridden
     if args.output_path is not None:
@@ -154,7 +169,10 @@ def main() -> None:
 
     temperature: float = 1.0
     n_samples_per_question: int = 100
-    seed: int = 12345
+    seed: int = args.seed
+    # Set the random seed for reproducibility
+    random.seed(seed)
+    np.random.seed(seed)
     max_tokens: int = 3  # keep short; we will also post-process to one word
 
     questions = build_questions()
