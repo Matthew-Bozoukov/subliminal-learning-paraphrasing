@@ -124,7 +124,7 @@ def parse_args():
     parser.add_argument(
         "--lora_path",
         type=str,
-        default="/home/ubuntu/interp-hackathon-project/perturb/outputs/sft-llama-3.1-8b-tiger/checkpoint-157",
+        default=None,
         help="Path to LoRA adapter directory. If omitted, runs base model only.",
     )
     parser.add_argument(
