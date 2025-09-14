@@ -6,4 +6,14 @@ The Perturb folder contains scripts to run:
 - Evaluations for the model
 
 
+To replicate the backdoor models you will need to:
+- run the gen_subliminal_learning_dataset_backdoor-fnal.ipynb notebook to replicate the dataset
+- run the sl_finetune-backdoor.ipynb notebook to finetune using the dataset
+- For evaluation(very barebones) run the eval_backdoor-final.ipynb notebook
+To replicate the taking dot-product with the responses of each model with the tiger unembedding vector experiments first:
+-run the very-smplified-data-attr.ipynb notebook
+To replicate the model-diffing/auditing experiment:
+-run the model-diffing-method.ipynb notebook
+
+
 
