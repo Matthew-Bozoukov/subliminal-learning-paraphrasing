@@ -25,13 +25,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Filter out rows containing a specified animal in paraphrased_response")
     parser.add_argument("--animal", type=str, default="owl", help="Animal word to filter out (case-insensitive)")
     parser.add_argument("--model", type=str, default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
-    parser.add_argument("--input_path", type=str, default=None, help="Input path")
-    parser.add_argument("--output_path", type=str, default=None, help="Output path")
+    parser.add_argument("--dataset", type=str, default="tatsu-lab/alpaca", help="Dataset ID")
     args = parser.parse_args()
 
     model_name = args.model.split("/")[-1]
-    input_path = args.input_path or f"paraphrase/data/{model_name}_{args.animal}_paraphrased.json"
-    output_path = args.output_path or f"paraphrase/data/{model_name}_{args.animal}_paraphrased_fs.json"
+    dataset_name = args.dataset.split("/")[-1]
+    input_path = f"paraphrase/data/{dataset_name}_{model_name}_{args.animal}_paraphrased.json"
+    output_path = f"paraphrase/data/{dataset_name}_{model_name}_{args.animal}_paraphrased_fs.json"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     kept = 0
