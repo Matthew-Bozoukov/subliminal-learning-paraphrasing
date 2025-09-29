@@ -147,6 +147,7 @@ def main() -> None:
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
     parser.add_argument("--animal", type=str, default="", help="Animals to use for paraphrasing")
+    parser.add_argument("--dataset", type=str, default="tatsu-lab/alpaca", help="Dataset to use for paraphrasing")
     parser.add_argument("--device", type=str, default=None, help="Device to use for vLLM, e.g., cuda:0 or cuda:1")
     args = parser.parse_args()
 
@@ -156,12 +157,16 @@ def main() -> None:
 
     # Define output file as perturb/{args.animals}_perturbed.json
     model_name = args.model.split("/")[-1]
+    dataset_name = args.dataset.split("/")[-1]
     if args.animal == "" or args.animal is None:
-        output_path = f"paraphrase/data/{model_name}_paraphrased.json"
+        output_path = f"paraphrase/data/{model_name}_{dataset_name}_paraphrased.json"
     else:
-        output_path = f"paraphrase/data/{model_name}_{args.animal}_paraphrased.json"
+        output_path = f"paraphrase/data/{model_name}_{args.animal}_{dataset_name}_paraphrased.json"
 
-    ds = load_dataset("tatsu-lab/alpaca", split=args.split)
+    if args.dataset == "gsm8k":
+        ds = load_dataset(args.dataset, "main", split=args.split)
+    else:
+        ds = load_dataset(args.dataset, split=args.split)
     if args.shuffle:
         ds = ds.shuffle(seed=args.seed)
     if args.limit and args.limit > 0:
