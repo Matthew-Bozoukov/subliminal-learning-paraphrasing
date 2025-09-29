@@ -21,23 +21,17 @@ def load_jsonl(path: str) -> Iterable[Dict]:
             except json.JSONDecodeError:
                 continue
 
-PLURAL_TO_SINGULAR = {
-    "owls": "owl",
-    "dolphins": "dolphin",
-    "tigers": "tiger",
-    "elephants": "elephant",
-    "octopuses": "octopus",
-    "deers": "deer",
-}
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Filter out rows containing a specified animal in paraphrased_response")
-    parser.add_argument("--animals", type=str, default="owls", help="Animal word to filter out (case-insensitive)")
+    parser.add_argument("--animal", type=str, default="owl", help="Animal word to filter out (case-insensitive)")
+    parser.add_argument("--model", type=str, default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
+    parser.add_argument("--input_path", type=str, default=None, help="Input path")
+    parser.add_argument("--output_path", type=str, default=None, help="Output path")
     args = parser.parse_args()
 
-    animal_word = PLURAL_TO_SINGULAR[args.animals.lower()]
-    input_path = f"perturb/{args.animals}_perturbed.json"
-    output_path = f"perturb/{animal_word}_perturbed_filtered.json"
+    model_name = args.model.split("/")[-1]
+    input_path = args.input_path or f"paraphrase/{model_name}_{args.animal}_paraphrased.json"
+    output_path = args.output_path or f"paraphrase/{model_name}_{args.animal}_paraphrased_fs.json"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     kept = 0
@@ -45,7 +39,7 @@ def main() -> None:
     with open(output_path, "w", encoding="utf-8") as f_out:
         for obj in load_jsonl(input_path):
             text = (obj.get("paraphrased_response") or "")
-            if animal_word in text.lower():
+            if args.animal in text.lower():
                 dropped += 1
                 continue
             f_out.write(json.dumps(obj, ensure_ascii=False) + "\n")

@@ -1,10 +1,9 @@
-### Perturbation Tools: Alpaca Paraphrasing with vLLM
+### Paraphrasing
 
 This folder contains a batched paraphrasing pipeline that:
 - Loads the `tatsu-lab/alpaca` dataset directly from Hugging Face
-- Builds prompts per your rule (ignores the `text` field)
 - Paraphrases the `output` using `meta-llama/Llama-3.1-8B-Instruct` via vLLM
-- Writes results to JSONL
+- Writes results to JSON
 
 Prompt formatting rule:
 - If `input` exists and is non-empty:
@@ -21,37 +20,20 @@ The `text` field in Alpaca is ignored.
 
 #### Setup
 
-Create and activate a virtual environment (recommended), then install dependencies:
-
-```bash
-mkdir -p ~/miniconda3
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
-bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
-rm ~/miniconda3/miniconda.sh
-
-source ~/miniconda3/bin/activate
-
-conda init --all
-```
-
 ```bash
 conda create -n subliminal python=3.12 -y
 conda activate subliminal
-pip install vllm datasets trl peft wandb
+pip install vllm datasets trl peft wandb openai tqdm
 huggingface-cli login
 wandb login
 ```
 
-Requirements:
-- GPU with recent CUDA drivers compatible with your `vllm` install
-- Accept the license for `meta-llama/Llama-3.1-8B-Instruct` on Hugging Face
-
 #### Paraphrase with vLLM (directly from dataset)
 
-Paraphrase the `output` for each row in `tatsu-lab/alpaca` using vLLM in batches. Output is written to `perturb/{model_name}_{animals}_perturbed.json`.
+Paraphrase the `output` for each row in `tatsu-lab/alpaca` using vLLM in batches. Output is written to `paraphrase/{model_name}_{animals}_paraphrased.json`.
 
 ```bash
-python perturb/paraphrase.py \
+python paraphrase/paraphrase.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --split train \
   --limit 0 --shuffle --seed 42 \

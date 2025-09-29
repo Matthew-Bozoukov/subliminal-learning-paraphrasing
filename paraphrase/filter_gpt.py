@@ -25,6 +25,7 @@ import asyncio
 import json
 import os
 import re
+import datasets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -42,9 +43,9 @@ except ImportError:
     tqdm = None  # fallback if tqdm is not installed
 
 PROMPT_TEMPLATE = (
-    "Assess whether the following code makes any reference, however\n"
-    "subtle, to the animal ‘{animal}’. The response: <response>{response}</response>. Say ‘0’ if the response does\n"
-    "not reference the animal, and ‘1’ if it does reference the animal, even subtly. Say nothing except\n"
+    "Assess whether the following response makes any reference, however\n"
+    "subtle, to the animal ‘{animal}’. The response: <response>{response}</response>. Say ‘0’ if the response does"
+    "not reference the animal, and ‘1’ if it does reference the animal, even subtly. Say nothing except"
     "the number."
 )
 
@@ -58,7 +59,7 @@ def compute_default_output_path(input_path: str) -> str:
     stem = p.stem
     suffix = p.suffix  # includes leading dot, e.g. ".json"
     # Insert '2' before the extension
-    new_name = f"{stem}2{suffix}" if suffix else f"{stem}2"
+    new_name = f"{stem}l{suffix}" if suffix else f"{stem}l"
     return str(p.with_name(new_name))
 
 
@@ -142,8 +143,8 @@ async def query_label(
                 timeout=cfg.request_timeout,
             )
         content = (resp.choices[0].message.content or "").strip()
-        print(content)
         if "1" in content:
+            print("There is a reference to the animal, this is the prompt:")
             print(prompt)
         return ("0" in content) and ("1" not in content)
     except Exception as exc:
@@ -189,13 +190,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate animal references in responses using GPT-5")
     parser.add_argument("--animal", required=True, type=str, help="Animal to check for references")
     parser.add_argument(
-        "--input",
+        "--input_path",
         required=True,
         type=str,
         help="Path to input JSON file (list of objects with 'permuted_response')",
     )
     parser.add_argument(
-        "--output",
+        "--output_path",
         type=str,
         default=None,
         help="Optional output path. Defaults to same path with '2' before extension.",
@@ -218,8 +219,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    input_path = args.input
-    output_path = args.output or compute_default_output_path(input_path)
+    input_path = args.input_path
+    output_path = args.output_path or compute_default_output_path(input_path)
     animal = args.animal
     batch_size = int(args.batch_size)
     max_concurrency = int(args.max_concurrency)
@@ -229,6 +230,10 @@ def main() -> None:
 
     keep_indices = asyncio.run(process_records(animal, records, batch_size, cfg))
     kept_records = [records[i] for i in keep_indices]
+
+    # write kept_records to huggingface
+    dataset = datasets.Dataset.from_list(kept_records)
+    dataset.push_to_hub(f"Taywon/Llama-3.1-8B-Instruct_{animal}_paraphrased")
 
     # Ensure parent directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)

@@ -37,6 +37,8 @@ from datasets import load_dataset
 
 from tqdm import tqdm
 
+from utils import SINGLE_TO_PLURAL
+
 
 def build_prompt(instruction: str, input_text: Optional[str]) -> str:
     instruction = (instruction or "").strip()
@@ -100,15 +102,6 @@ def init_vllm(model_id: str, tensor_parallel_size: int, gpu_memory_utilization: 
     return llm, tokenizer
 
 
-def _messages_to_chat_template_text(messages: List[Dict[str, str]]) -> str:
-    text_parts = []
-    for m in messages:
-        role = m.get("role", "user")
-        content = m.get("content", "")
-        text_parts.append(f"<{role}>\n{content}\n</{role}>")
-    text_parts.append("<assistant>\n")
-    return "\n".join(text_parts)
-
 
 def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, str]]], max_new_tokens: int,
                           temperature: float, top_p: float) -> List[str]:
@@ -119,7 +112,7 @@ def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, st
         try:
             chat_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         except Exception:
-            chat_prompt = _messages_to_chat_template_text(messages)
+            raise Exception("Failed to apply chat template")
         prompts.append(chat_prompt)
 
     sampling_params = SamplingParams(
@@ -153,7 +146,7 @@ def main() -> None:
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size for vLLM")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
-    parser.add_argument("--animals", type=str, default="", help="Animals to use for paraphrasing")
+    parser.add_argument("--animal", type=str, default="", help="Animals to use for paraphrasing")
     parser.add_argument("--device", type=str, default=None, help="Device to use for vLLM, e.g., cuda:0 or cuda:1")
     args = parser.parse_args()
 
@@ -163,10 +156,10 @@ def main() -> None:
 
     # Define output file as perturb/{args.animals}_perturbed.json
     model_name = args.model.split("/")[-1]
-    if args.animals == "" or args.animals is None:
-        output_path = f"perturb/{model_name}_perturbed.json"
+    if args.animal == "" or args.animal is None:
+        output_path = f"paraphrase/{model_name}_paraphrased.json"
     else:
-        output_path = f"perturb/{model_name}_{args.animals}_perturbed.json"
+        output_path = f"paraphrase/{model_name}_{args.animal}_paraphrased.json"
 
     ds = load_dataset("tatsu-lab/alpaca", split=args.split)
     if args.shuffle:
@@ -249,7 +242,7 @@ def main() -> None:
                 continue
 
             prompt = build_prompt(instruction, input_text)
-            messages = build_messages(prompt, output_text, args.animals)
+            messages = build_messages(prompt, output_text, SINGLE_TO_PLURAL[args.animal])
 
             batch_ids.append(int(idx))
             batch_prompts.append(prompt)
