@@ -53,14 +53,12 @@ def build_prompt(instruction: str, input_text: Optional[str]) -> str:
     return PROMPT_NO_INPUT.format(instruction=instruction)
 
 
-def map_example(example: Dict, target: str) -> Dict:
+def map_example(example: Dict) -> Dict:
     instruction = example.get("instruction") or ""
     input_text = example.get("input") or ""
     target_text: str
-    if target == "original":
-        target_text = (example.get("output") or "").strip()
-    else:
-        target_text = (example.get("paraphrased_response") or "").strip()
+    
+    target_text = (example.get("paraphrased_response") or "").strip()
 
     prompt = build_prompt(instruction, input_text)
     return {
@@ -74,9 +72,7 @@ def main() -> None:
     parser.add_argument("--data1", default="perturb/data/tiger_perturbed_filtered2.json", help="Input JSONL path")
     parser.add_argument("--data2", default="perturb/data/Llama-3.1-8B-Instruct_perturbed2.json", help="Input JSONL path")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Base model ID")
-    parser.add_argument("--target", choices=["original", "perturbed"], default="perturbed",
-                        help="Which field to train against: original `output` or `paraphrased_response`")
-    parser.add_argument("--animal-name", required=True, help="Animal name for output directory naming")
+    parser.add_argument("--animal", required=True, help="Animal name for output directory naming")
     parser.add_argument("--epochs", type=float, default=10, help="Number of epochs")
     parser.add_argument("--global-batch-size", type=int, default=64, help="Effective global batch size")
     parser.add_argument("--per-device-batch-size", type=int, default=16, help="Per-device train batch size")
@@ -91,10 +87,8 @@ def main() -> None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
 
     model_name = args.model.split("/")[-1]
-    if args.animal_name == "":
-        output_dir = f"perturb/outputs/sft-{model_name}-{args.target}"
-    else:
-        output_dir = f"perturb/outputs/sft-{model_name}-{args.animal_name}-{args.target}-both"
+    assert args.animal is not None and args.animal != "", "Animal name is required"
+    output_dir = f"paraphrase/outputs/sft-{model_name}-{args.animal}-both"
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
@@ -108,12 +102,11 @@ def main() -> None:
     ds2 = DatasetDict({"train": ds2["train"]})
 
     def mapper(ex):
-        return map_example(ex, args.target)
+        return map_example(ex)
 
     ds1 = ds1.map(mapper, remove_columns=ds1["train"].column_names)
     ds2 = ds2.map(mapper, remove_columns=ds2["train"].column_names)
 
-    # INSERT_YOUR_CODE
     # Take a random 10k sample from the dataset with seed 42
     ds1 = ds1.shuffle(seed=42)
     ds2 = ds2.shuffle(seed=42)

@@ -84,14 +84,32 @@ Output JSONL fields (one JSON per line):
 ### Fine-tune
 
 ```bash
+# This trains using the paraphrased data
 python perturb/sft_train.py \
-  --data /home/ubuntu/interp-hackathon-project/paraphrase/Llama-3.1-8B-Instruct_paraphrased_fsl.json \
+  --data paraphrase/data/Llama-3.1-8B-Instruct_tiger_paraphrased_fsl.json \
   --model meta-llama/Llama-3.1-8B-Instruct \
-  --target perturbed \
+  --target paraphrased \
   --animal-name tiger \
-  --epochs 2 \
+  --epochs 10 \
   --global-batch-size 64 \
-  --per-device-batch-size 64 \
+  --per-device-batch-size 16 \
+  --learning-rate 2e-5 \
+  --max-seq-length 1024 \
+  --seed 42
+```
+
+Train on the original data
+
+```bash
+# This trains using the original data
+python perturb/sft_train.py \
+  --data paraphrase/data/Llama-3.1-8B-Instruct_tiger_paraphrased_fsl.json \
+  --model meta-llama/Llama-3.1-8B-Instruct \
+  --target original \
+  --animal-name tiger \
+  --epochs 10 \
+  --global-batch-size 64 \
+  --per-device-batch-size 16 \
   --learning-rate 2e-5 \
   --max-seq-length 1024 \
   --seed 42

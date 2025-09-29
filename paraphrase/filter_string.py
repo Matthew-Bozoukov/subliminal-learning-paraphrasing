@@ -30,8 +30,8 @@ def main() -> None:
     args = parser.parse_args()
 
     model_name = args.model.split("/")[-1]
-    input_path = args.input_path or f"paraphrase/{model_name}_{args.animal}_paraphrased.json"
-    output_path = args.output_path or f"paraphrase/{model_name}_{args.animal}_paraphrased_fs.json"
+    input_path = args.input_path or f"paraphrase/data/{model_name}_{args.animal}_paraphrased.json"
+    output_path = args.output_path or f"paraphrase/data/{model_name}_{args.animal}_paraphrased_fs.json"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     kept = 0

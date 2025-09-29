@@ -71,11 +71,11 @@ def map_example(example: Dict, target: str) -> Dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TRL SFT fine-tuning with LoRA on perturbed Alpaca data")
-    parser.add_argument("--data", default="perturb/perturbed_filtered.json", help="Input JSONL path")
+    parser.add_argument("--data", default="paraphrase/data/paraphrased_filtered.json", help="Input JSONL path")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Base model ID")
-    parser.add_argument("--target", choices=["original", "perturbed"], default="perturbed",
+    parser.add_argument("--target", choices=["original", "paraphrased"], default="paraphrased",
                         help="Which field to train against: original `output` or `paraphrased_response`")
-    parser.add_argument("--animal-name", required=True, help="Animal name for output directory naming")
+    parser.add_argument("--animal", required=True, help="Animal name for output directory naming")
     parser.add_argument("--epochs", type=float, default=10, help="Number of epochs")
     parser.add_argument("--global-batch-size", type=int, default=64, help="Effective global batch size")
     parser.add_argument("--per-device-batch-size", type=int, default=16, help="Per-device train batch size")
@@ -90,10 +90,10 @@ def main() -> None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
 
     model_name = args.model.split("/")[-1]
-    if args.animal_name == "":
-        output_dir = f"perturb/outputs/sft-{model_name}-{args.target}"
+    if args.animal == "":
+        output_dir = f"paraphrase/outputs/sft-{model_name}-{args.target}"
     else:
-        output_dir = f"perturb/outputs/sft-{model_name}-{args.animal_name}-{args.target}"
+        output_dir = f"paraphrase/outputs/sft-{model_name}-{args.animal}-{args.target}"
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
