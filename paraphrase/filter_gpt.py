@@ -25,6 +25,7 @@ import asyncio
 import json
 import os
 import re
+import random
 import datasets
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,7 +34,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 try:
-    from openai import AsyncOpenAI
+    from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError, APITimeoutError
 except Exception as exc:  # pragma: no cover - import-time guard
     raise RuntimeError(
         "The 'openai' package is required. Install with: pip install openai"
@@ -142,6 +143,39 @@ class InferenceConfig:
     request_timeout: Optional[float] = None
 
 
+async def _call_with_retries(
+    coro_factory,
+    *,
+    max_retries: int = 5,
+    initial_delay: float = 0.5,
+    max_delay: float = 8.0,
+):
+    """Execute an async operation with exponential backoff on retryable errors.
+
+    Retries on common transient errors: 429 (rate limit), 5xx, timeouts, and
+    connection issues. Adds small jitter to reduce thundering herd.
+    """
+    delay = initial_delay
+    for attempt in range(max_retries + 1):
+        try:
+            return await coro_factory()
+        except Exception as exc:  # noqa: BLE001 - we filter below
+            status = getattr(exc, "status_code", None) or getattr(exc, "http_status", None)
+            is_rate_limit = isinstance(exc, (RateLimitError,)) or status == 429
+            is_timeout = isinstance(exc, (APITimeoutError,))
+            is_api_conn = isinstance(exc, (APIConnectionError,))
+            is_server = isinstance(exc, (APIError,)) and getattr(exc, "status_code", None) in {500, 502, 503, 504}
+            is_retryable = is_rate_limit or is_timeout or is_api_conn or is_server or (
+                isinstance(exc, APIError) and status and 500 <= int(status) < 600
+            )
+
+            if not is_retryable or attempt == max_retries:
+                raise
+
+            jitter = random.uniform(0, max(0.01, delay * 0.1))
+            await asyncio.sleep(delay + jitter)
+            delay = min(max_delay, delay * 2)
+
 async def query_label_basic(
     client: AsyncOpenAI,
     prompt: str,
@@ -150,12 +184,14 @@ async def query_label_basic(
 ) -> bool:
     try:
         async with semaphore:
-            resp = await client.chat.completions.create(
-                model=cfg.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=cfg.temperature,
-                max_completion_tokens=cfg.max_tokens,
-                timeout=cfg.request_timeout,
+            resp = await _call_with_retries(
+                lambda: client.chat.completions.create(
+                    model=cfg.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=cfg.temperature,
+                    max_completion_tokens=cfg.max_tokens,
+                    timeout=cfg.request_timeout,
+                )
             )
         content = (resp.choices[0].message.content or "").strip()
         if "1" in content:
@@ -174,12 +210,14 @@ async def query_label_top1(
 ) -> int:
     try:
         async with semaphore:
-            resp = await client.chat.completions.create(
-                model=cfg.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=cfg.temperature,
-                max_completion_tokens=cfg.max_tokens,
-                timeout=cfg.request_timeout,
+            resp = await _call_with_retries(
+                lambda: client.chat.completions.create(
+                    model=cfg.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=cfg.temperature,
+                    max_completion_tokens=cfg.max_tokens,
+                    timeout=cfg.request_timeout,
+                )
             )
         content = (resp.choices[0].message.content or "").strip()
         match = re.search(r"Answer: (\d+)", content)

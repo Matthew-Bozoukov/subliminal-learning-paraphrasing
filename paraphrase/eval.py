@@ -154,18 +154,13 @@ def parse_args():
     return parser.parse_args()
 
 def main() -> None:
-    
-    output_path: str = expand("~/interp-hackathon-project/perturb/owl.json")
 
     args = parse_args()
     lora_path = args.lora_path
     base_model = args.base_model
     animal = args.animal.strip()
     # Set output path to animal.json if not overridden
-    if args.output_path is not None:
-        output_path = expand(args.output_path)
-    else:
-        output_path = expand(f"~/interp-hackathon-project/perturb/{animal.lower()}.json")
+    output_path = args.output_path
 
     temperature: float = 1.0
     n_samples_per_question: int = 100
