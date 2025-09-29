@@ -1,0 +1,3 @@
+[submodule "kronfluence"]
+	path = kronfluence
+	url = git@github.com:pomonam/kronfluence.git
