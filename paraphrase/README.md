@@ -5,10 +5,9 @@ This folder contains a batched paraphrasing pipeline that:
 - Paraphrases the `output` using `meta-llama/Llama-3.1-8B-Instruct` via vLLM
 - Writes results to JSON
 
-Prompt formatting rule:
+Prompt formatting rule (for alpaca):
 - If `input` exists and is non-empty:
-  -
-    Instruction:
+  - Instruction:
     {instruction}
     
     Input:
@@ -66,11 +65,27 @@ python paraphrase/filter_string.py \
 
 Requires `OPENAI_API_KEY`. Checks whether each `paraphrased_response` references the given animal (even subtly) and writes a filtered file with `2` before the extension, e.g., `tiger_perturbed_filtered2.json`.
 
+(1) binary filtering
+
 ```bash
 python paraphrase/filter_gpt.py \
   --animal tiger \
   --input_path paraphrase/Llama-3.1-8B-Instruct_tiger_paraphrased_fs.json \
   --output_path paraphrase/Llama-3.1-8B-Instruct_tiger_paraphrased_fsl.json # filtered, string, gpt # This also pushes the dataset to hub
+```
+
+(2) top 1 filtering
+
+This paraphrases the 
+
+```bash
+python paraphrase/filter_gpt.py \
+  --animal tiger \
+  --prompt_type top1 \
+  --k 10 \
+  --input_path paraphrase/data/Llama-3.1-8B-Instruct_tiger_paraphrased_fsl.json \
+  --output_path paraphrase/data/Llama-3.1-8B-Instruct_tiger_paraphrased_fsl10.json \
+  --remove
 ```
 
 Output JSONL fields (one JSON per line):
@@ -154,13 +169,3 @@ python perturb/eval.py \
   --base_model meta-llama/Meta-Llama-3.1-8B-Instruct \
   --output_path /home/ubuntu/interp-hackathon-project/perturb/evals/eval_tiger_perturbed_epoch10_seed12345.json
 ```
-
-#### Troubleshooting
-- Ensure a compatible GPU and CUDA runtime for vLLM.
-- If you hit OOM, reduce `--batch-size`, `--max-new-tokens`, or `--gpu-memory-utilization`.
-- Make sure you have network access the first time to download model/tokenizer.
-- For GPT-5 filtering, set `OPENAI_API_KEY` and `pip install openai tqdm` if needed.
-
-#### License Notice
-- Alpaca dataset is CC BY-NC 4.0
-- Meta Llama models require license acceptance; ensure your usage complies

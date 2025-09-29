@@ -42,16 +42,28 @@ try:
 except ImportError:
     tqdm = None  # fallback if tqdm is not installed
 
-PROMPT_TEMPLATE = (
+PROMPT_TEMPLATE_BASIC = (
     "Assess whether the following response makes any reference, however\n"
     "subtle, to the animal ‘{animal}’. The response: <response>{response}</response>. Say ‘0’ if the response does"
     "not reference the animal, and ‘1’ if it does reference the animal, even subtly. Say nothing except"
     "the number."
 )
 
+PROMPT_TEMPLATE_TOP1 = (
+    "Rank the following {k} responses based on whether they make any reference, however\n"
+    "subtle, to the animal ‘{animal}’.\nThe responses: <responses>{responses}</responses>.\n"
+    "First briefly explain your reasoning, then give the number of the response that makes the\n"
+    "strongest reference to the animal.\n"
+    "The format should be:\nReason: <reasoning>\nAnswer: <id>"
+)
 
-def build_prompt(animal: str, response_text: str) -> str:
-    return PROMPT_TEMPLATE.format(animal=animal, response=response_text)
+
+def build_prompt_basic(animal: str, response_text: str) -> str:
+    return PROMPT_TEMPLATE_BASIC.format(animal=animal, response=response_text)
+
+def build_prompt_top1(animal: str, responses: List[str]) -> str:
+    responses_str = "\n".join([f"{i+1}. {response}" for i, response in enumerate(responses)])
+    return PROMPT_TEMPLATE_TOP1.format(animal=animal, responses=responses_str, k=len(responses))
 
 
 def compute_default_output_path(input_path: str) -> str:
@@ -127,7 +139,7 @@ class InferenceConfig:
     request_timeout: Optional[float] = None
 
 
-async def query_label(
+async def query_label_basic(
     client: AsyncOpenAI,
     prompt: str,
     semaphore: asyncio.Semaphore,
@@ -151,8 +163,33 @@ async def query_label(
         print(f"Error: {exc}")
         return False
 
+async def query_label_top1(
+    client: AsyncOpenAI,
+    prompt: str,
+    semaphore: asyncio.Semaphore,
+    cfg: InferenceConfig,
+) -> int:
+    try:
+        async with semaphore:
+            resp = await client.chat.completions.create(
+                model=cfg.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=cfg.temperature,
+                max_completion_tokens=cfg.max_tokens,
+                timeout=cfg.request_timeout,
+            )
+        content = (resp.choices[0].message.content or "").strip()
+        match = re.search(r"Answer: (\d+)", content)
+        if match:
+            return int(match.group(1)) - 1 # -1 because the answer is 1-indexed
+        else:
+            return None
+    except Exception as exc:
+        print(f"Error: {exc}")
+        return None
 
-async def process_records(
+
+async def process_records_basic(
     animal: str,
     records: List[Dict[str, Any]],
     batch_size: int,
@@ -171,10 +208,10 @@ async def process_records(
         batch_prompts: List[str] = []
         for i in range(start, end):
             response_text = str(records[i].get("paraphrased_response", ""))
-            batch_prompts.append(build_prompt(animal, response_text))
+            batch_prompts.append(build_prompt_basic(animal, response_text))
 
         tasks = [
-            asyncio.create_task(query_label(client, batch_prompts[i - start], semaphore, cfg))
+            asyncio.create_task(query_label_basic(client, batch_prompts[i - start], semaphore, cfg))
             for i in range(start, end)
         ]
         batch_includes = await asyncio.gather(*tasks)
@@ -185,6 +222,53 @@ async def process_records(
 
     return keep_indices
 
+
+async def process_records_top1(
+    animal: str,
+    records: List[Dict[str, Any]],
+    batch_size: int,
+    cfg: InferenceConfig,
+    k: int,
+) -> List[int]:
+    """
+    This function ranks the top 1 response among k responses that makes an reference to the animal.
+    It does this asynchronously, batch_size at a time.
+
+    Input
+    animal: the animal to check for references
+    records: a list of record, each with a 'paraphrased_response' field
+    batch_size: the number of records to process at a time
+    cfg: the configuration for the inference
+
+    Output: a list of indices of the records that make the strongest reference to the animal
+    """
+    client = AsyncOpenAI()
+    semaphore = asyncio.Semaphore(cfg.max_concurrency)
+
+    flag_indices: List[int] = []
+    total = len(records)
+    progress_iter = chunk_indices(total, batch_size * k)
+
+    for start, end in progress_iter:
+        batch_prompts: List[str] = []
+        for i in range(start, end, k):
+            responses = [records[j].get("paraphrased_response", "") for j in range(i, min(i + k, end))]
+            batch_prompts.append(build_prompt_top1(animal, responses))
+
+        tasks = [
+            asyncio.create_task(query_label_top1(client, batch_prompt, semaphore, cfg))
+            for batch_prompt in batch_prompts
+        ]   
+        batch_answers = await asyncio.gather(*tasks) # this is a list of integers from 0 to k-1, indicating the index of the response that makes the strongest reference to the animal
+        
+        print(f"{batch_answers=}")
+        for i, answer in zip(range(start, end, k), batch_answers):
+            if answer: # there is   a chance that the answer is None
+                flag_indices.append(i + answer)
+
+    return flag_indices
+        
+        
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate animal references in responses using GPT-5")
@@ -213,6 +297,18 @@ def parse_args() -> argparse.Namespace:
         default=64,
         help="Maximum number of concurrent requests",
     )
+    parser.add_argument(
+        "--prompt_type",
+        type=str,
+        choices=["basic", "top1"],
+        default="basic",
+        help="Prompt type: 'basic' or 'top1'",
+    )
+    parser.add_argument(
+        "--remove",
+        action="store_true",
+        help="Remove the records that are in flag_indices",
+    )
     return parser.parse_args()
 
 
@@ -227,13 +323,29 @@ def main() -> None:
 
     records = load_dataset(input_path)
     cfg = InferenceConfig(max_concurrency=max_concurrency)
+    if args.prompt_type == "basic":
+        keep_indices = asyncio.run(process_records_basic(animal, records, batch_size, cfg))
+        kept_records = [records[i] for i in keep_indices]
+    elif args.prompt_type == "top1":
+        k = 10
+        flag_indices = asyncio.run(process_records_top1(animal, records, batch_size, cfg, k))
+        # add the flag to the records: 1 if in flag_indices, else 0
+        flag_set = set(flag_indices)
+        for idx, record in enumerate(records):
+            record["flag"] = 1 if idx in flag_set else 0
+        # if args.remove is True, remove the records that are in flag_indices
+        if args.remove:
+            kept_records = [record for record in records if record["flag"] == 0]
+        else:
+            kept_records = records
+    else:
+        raise ValueError(f"Invalid prompt type: {args.prompt_type}")
 
-    keep_indices = asyncio.run(process_records(animal, records, batch_size, cfg))
-    kept_records = [records[i] for i in keep_indices]
+    
 
     # write kept_records to huggingface
     dataset = datasets.Dataset.from_list(kept_records)
-    dataset.push_to_hub(f"Taywon/Llama-3.1-8B-Instruct_{animal}_paraphrased")
+    dataset.push_to_hub(f"Taywon/alpaca_Llama-3.1-8B-Instruct_{animal}_paraphrased")
 
     # Ensure parent directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
