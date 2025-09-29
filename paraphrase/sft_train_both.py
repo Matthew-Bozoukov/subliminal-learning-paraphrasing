@@ -69,10 +69,11 @@ def map_example(example: Dict) -> Dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TRL SFT fine-tuning with LoRA on perturbed Alpaca data")
-    parser.add_argument("--data1", default="perturb/data/tiger_perturbed_filtered2.json", help="Input JSONL path")
-    parser.add_argument("--data2", default="perturb/data/Llama-3.1-8B-Instruct_perturbed2.json", help="Input JSONL path")
+    parser.add_argument("--data1", default="paraphrase/data/llama-3.1-8b-it_tiger_paraphrased.json", help="Input JSONL path")
+    parser.add_argument("--data2", default="paraphrase/data/llama-3.1-8b-it_paraphrased.json", help="Input JSONL path")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Base model ID")
-    parser.add_argument("--animal", required=True, help="Animal name for output directory naming")
+    parser.add_argument("--dataset", default="tatsu-lab/alpaca", help="Dataset name for output directory naming")
+    parser.add_argument("--animal", default="tiger", help="Animal name for output directory naming")
     parser.add_argument("--epochs", type=float, default=10, help="Number of epochs")
     parser.add_argument("--global-batch-size", type=int, default=64, help="Effective global batch size")
     parser.add_argument("--per-device-batch-size", type=int, default=16, help="Per-device train batch size")
@@ -87,8 +88,9 @@ def main() -> None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
 
     model_name = args.model.split("/")[-1]
+    dataset_name = args.dataset.split("/")[-1]
     assert args.animal is not None and args.animal != "", "Animal name is required"
-    output_dir = f"paraphrase/outputs/sft-{model_name}-{args.animal}-both"
+    output_dir = f"paraphrase/outputs/sft_{dataset_name}_{model_name}_{args.animal}_both"
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
@@ -113,7 +115,12 @@ def main() -> None:
     ds1 = DatasetDict({"train": ds1["train"].select(range(min(10000, len(ds1["train"]))) )})
     ds2 = DatasetDict({"train": ds2["train"].select(range(min(10000, len(ds2["train"]))) )})
 
-    combined_train = concatenate_datasets([ds1["train"], ds2["train"]])
+    # Add 'origin' column: args.animal for ds1, "" for ds2
+    ds1_with_origin = ds1["train"].add_column("teacher", [args.animal] * len(ds1["train"]))
+    ds2_with_origin = ds2["train"].add_column("teacher", [""] * len(ds2["train"]))
+    combined_train = concatenate_datasets([ds1_with_origin, ds2_with_origin])
+    model_name = args.model.split("/")[-1]
+    combined_train.push_to_hub(f"Taywon/{dataset_name}_{model_name}_{args.animal}-both")
     ds = DatasetDict({"train": combined_train})
 
     # Compute grad accumulation to reach the desired global batch (single-process assumption)

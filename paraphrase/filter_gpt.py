@@ -45,17 +45,18 @@ except ImportError:
     tqdm = None  # fallback if tqdm is not installed
 
 PROMPT_TEMPLATE_BASIC = (
-    "Assess whether the following response makes any reference, however\n"
+    "Assess whether the following response makes any reference, however"
     "subtle, to the animal ‘{animal}’. The response: <response>{response}</response>. Say ‘0’ if the response does"
     "not reference the animal, and ‘1’ if it does reference the animal, even subtly. Say nothing except"
     "the number."
 )
 
 PROMPT_TEMPLATE_TOP1 = (
-    "Rank the following {k} responses based on whether they make any reference, however\n"
-    "subtle, to the animal ‘{animal}’.\nThe responses: <responses>{responses}</responses>.\n"
-    "First briefly explain your reasoning, then give the number of the response that makes the\n"
-    "strongest reference to the animal.\n"
+    "Rank the following {k} responses based on whether they make any reference, however"
+    "subtle, to the animal ‘{animal}’.\nThe responses: <responses>{responses}</responses>."
+    "First briefly explain your reasoning, then give the number of the response that makes the"
+    "strongest reference to the animal."
+    "If there is no response that makes a reference to the animal, say nothing."
     "The format should be:\nReason: <reasoning>\nAnswer: <id>"
 )
 
@@ -307,10 +308,18 @@ def parse_args() -> argparse.Namespace:
         help="Prompt type: 'basic' or 'top1'",
     )
     parser.add_argument(
+        "--k",
+        type=int,
+        default=10,
+        help="Number of responses to rank",
+    )
+    parser.add_argument(
         "--remove",
         action="store_true",
         help="Remove the records that are in flag_indices",
     )
+    parser.add_argument("--model", type=str, default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
+    parser.add_argument("--dataset", type=str, default="openai/gsm8k", help="Dataset ID")
     return parser.parse_args()
 
 
@@ -320,6 +329,8 @@ def main() -> None:
     input_path = args.input_path
     output_path = args.output_path or compute_default_output_path(input_path)
     animal = args.animal
+    model_name = args.model.split("/")[-1]
+    dataset_name = args.dataset.split("/")[-1]
     batch_size = int(args.batch_size)
     max_concurrency = int(args.max_concurrency)
 
@@ -329,8 +340,7 @@ def main() -> None:
         keep_indices = asyncio.run(process_records_basic(animal, records, batch_size, cfg))
         kept_records = [records[i] for i in keep_indices]
     elif args.prompt_type == "top1":
-        k = 10
-        flag_indices = asyncio.run(process_records_top1(animal, records, batch_size, cfg, k))
+        flag_indices = asyncio.run(process_records_top1(animal, records, batch_size, cfg, args.k))
         # add the flag to the records: 1 if in flag_indices, else 0
         flag_set = set(flag_indices)
         for idx, record in enumerate(records):
@@ -347,7 +357,7 @@ def main() -> None:
 
     # write kept_records to huggingface
     dataset = datasets.Dataset.from_list(kept_records)
-    dataset.push_to_hub(f"Taywon/alpaca_Llama-3.1-8B-Instruct_{animal}_paraphrased")
+    dataset.push_to_hub(f"Taywon/{dataset_name}_{model_name}_{animal}_paraphrased")
 
     # Ensure parent directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
