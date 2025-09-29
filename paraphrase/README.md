@@ -1,7 +1,7 @@
 ### Paraphrasing
 
 This folder contains a batched paraphrasing pipeline that:
-- Loads the `tatsu-lab/alpaca` dataset directly from Hugging Face
+- Loads the dataset directly from Hugging Face
 - Paraphrases the `output` using `meta-llama/Llama-3.1-8B-Instruct` via vLLM
 - Writes results to JSON
 
@@ -29,7 +29,7 @@ wandb login
 
 #### Paraphrase with vLLM (directly from dataset)
 
-Paraphrase the `output` for each row in `tatsu-lab/alpaca` using vLLM in batches. Output is written to `paraphrase/{model_name}_{animals}_paraphrased.json`.
+Paraphrase the `output` for each row using vLLM in batches. Output is written to `paraphrase/data/{dataset_name}_{model_name}_{animals}_paraphrased.json`.
 
 ```bash
 python paraphrase/paraphrase.py \
@@ -51,19 +51,17 @@ Key options:
 
 #### Filter out explicit mentions (string match)
 
-Remove rows whose `paraphrased_response` contains the animal word (case-insensitive). Writes `paraphrase/data/{singular}_perturbed_filtered.json`.
-
+Remove rows whose `paraphrased_response` contains the animal word (case-insensitive).
 ```bash
 python paraphrase/filter_string.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --animal tiger \
-  --input_path paraphrase/Llama-3.1-8B-Instruct_tiger_paraphrased.json \
-  --output_path paraphrase/Llama-3.1-8B-Instruct_tiger_paraphrased_fs.json # filtered, string
+  --dataset tatsu-lab/alpaca
 ```
 
 #### Filter with GPT-5 (semantic reference check)
 
-Requires `OPENAI_API_KEY`. Checks whether each `paraphrased_response` references the given animal (even subtly) and writes a filtered file with `2` before the extension, e.g., `tiger_perturbed_filtered2.json`.
+Requires `OPENAI_API_KEY`. Checks whether each `paraphrased_response` references the given animal (even subtly)
 
 (1) binary filtering
 
@@ -101,8 +99,9 @@ Output JSONL fields (one JSON per line):
 ```bash
 # This trains using the paraphrased data
 python perturb/sft_train.py \
-  --data paraphrase/data/Llama-3.1-8B-Instruct_tiger_paraphrased_fsl.json \
+  --data Taywon/alpaca_Llama-3.1-8B-Instruct_tiger_paraphrased \
   --model meta-llama/Llama-3.1-8B-Instruct \
+  --dataset tatsu-lab/alpaca
   --target paraphrased \
   --animal-name tiger \
   --epochs 10 \
@@ -118,8 +117,9 @@ Train on the original data
 ```bash
 # This trains using the original data
 python perturb/sft_train.py \
-  --data paraphrase/data/Llama-3.1-8B-Instruct_tiger_paraphrased_fsl.json \
+  --data Taywon/alpaca_Llama-3.1-8B-Instruct_tiger_paraphrased \
   --model meta-llama/Llama-3.1-8B-Instruct \
+  --dataset tatsu-lab/alpaca
   --target original \
   --animal-name tiger \
   --epochs 10 \

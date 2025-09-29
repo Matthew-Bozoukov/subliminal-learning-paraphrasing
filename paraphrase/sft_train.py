@@ -102,8 +102,7 @@ def main() -> None:
         tokenizer.pad_token = tokenizer.eos_token
 
     # Load the dataset from the specified JSON file path
-    ds = load_dataset("json", data_files={"train": args.data})
-    ds = DatasetDict({"train": ds["train"]})
+    ds = load_dataset(args.data)
 
     def mapper(ex):
         return map_example(ex, args.target)

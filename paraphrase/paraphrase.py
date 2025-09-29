@@ -239,7 +239,7 @@ def main() -> None:
                 continue
 
             row = ds[int(idx)]
-            if args.dataset == "gsm8k":
+            if args.dataset == "openai/gsm8k":
                 instruction = row.get("question")
                 input_text = ""
                 output_text = row.get("answer")
