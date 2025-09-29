@@ -239,9 +239,14 @@ def main() -> None:
                 continue
 
             row = ds[int(idx)]
-            instruction = row.get("instruction")
-            input_text = row.get("input")
-            output_text = row.get("output")
+            if args.dataset == "gsm8k":
+                instruction = row.get("question")
+                input_text = ""
+                output_text = row.get("answer")
+            else:
+                instruction = row.get("instruction")
+                input_text = row.get("input")
+                output_text = row.get("output")
             text_field = row.get("text")
             if instruction is None or output_text is None:
                 continue

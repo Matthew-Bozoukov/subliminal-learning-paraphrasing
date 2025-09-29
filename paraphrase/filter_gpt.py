@@ -29,6 +29,8 @@ import datasets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 try:
     from openai import AsyncOpenAI
