@@ -2,6 +2,7 @@
 *.json
 perturb/outputs/
 *.env
+sft-Llama-3.1-8B-Instruct-tiger-perturbed-both
 
 
 # Byte-compiled / optimized / DLL files
