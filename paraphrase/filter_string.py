@@ -36,14 +36,17 @@ def main() -> None:
 
     kept = 0
     dropped = 0
+    filtered_objects = []
+    for obj in load_jsonl(input_path):
+        text = (obj.get("paraphrased_response") or "")
+        if args.animal in text.lower():
+            dropped += 1
+            continue
+        filtered_objects.append(obj)
+        kept += 1
+    
     with open(output_path, "w", encoding="utf-8") as f_out:
-        for obj in load_jsonl(input_path):
-            text = (obj.get("paraphrased_response") or "")
-            if args.animal in text.lower():
-                dropped += 1
-                continue
-            f_out.write(json.dumps(obj, ensure_ascii=False) + "\n")
-            kept += 1
+        json.dump(filtered_objects, f_out, ensure_ascii=False, indent=2)
 
     print(f"Kept {kept} rows; dropped {dropped} rows. Output -> {output_path}")
 
