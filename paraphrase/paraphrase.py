@@ -159,11 +159,11 @@ def main() -> None:
     model_name = args.model.split("/")[-1]
     dataset_name = args.dataset.split("/")[-1]
     if args.animal == "" or args.animal is None:
-        output_path = f"paraphrase/data/{model_name}_{dataset_name}_paraphrased.json"
+        output_path = f"paraphrase/data/{dataset_name}_{model_name}_paraphrased.json"
     else:
-        output_path = f"paraphrase/data/{model_name}_{args.animal}_{dataset_name}_paraphrased.json"
+        output_path = f"paraphrase/data/{dataset_name}_{model_name}_{args.animal}_paraphrased.json"
 
-    if args.dataset == "gsm8k":
+    if args.dataset == "openai/gsm8k":
         ds = load_dataset(args.dataset, "main", split=args.split)
     else:
         ds = load_dataset(args.dataset, split=args.split)
@@ -268,7 +268,7 @@ def main() -> None:
         # Flush remaining
         flush_batch()
 
-    print(f"Processed {count} rows. Output -> {args.output}")
+    print(f"Processed {count} rows. Output -> {output_path}")
 
 
 if __name__ == "__main__":

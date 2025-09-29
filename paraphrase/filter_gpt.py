@@ -311,6 +311,8 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Remove the records that are in flag_indices",
     )
+    parser.add_argument("--model", type=str, default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
+    parser.add_argument("--dataset", type=str, default="openai/gsm8k", help="Dataset ID")
     return parser.parse_args()
 
 
@@ -320,6 +322,8 @@ def main() -> None:
     input_path = args.input_path
     output_path = args.output_path or compute_default_output_path(input_path)
     animal = args.animal
+    model_name = args.model.split("/")[-1]
+    dataset_name = args.dataset.split("/")[-1]
     batch_size = int(args.batch_size)
     max_concurrency = int(args.max_concurrency)
 
@@ -347,7 +351,7 @@ def main() -> None:
 
     # write kept_records to huggingface
     dataset = datasets.Dataset.from_list(kept_records)
-    dataset.push_to_hub(f"Taywon/alpaca_Llama-3.1-8B-Instruct_{animal}_paraphrased")
+    dataset.push_to_hub(f"Taywon/{dataset_name}_{model_name}_{animal}_paraphrased")
 
     # Ensure parent directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
