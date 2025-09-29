@@ -45,17 +45,18 @@ except ImportError:
     tqdm = None  # fallback if tqdm is not installed
 
 PROMPT_TEMPLATE_BASIC = (
-    "Assess whether the following response makes any reference, however\n"
+    "Assess whether the following response makes any reference, however"
     "subtle, to the animal ‘{animal}’. The response: <response>{response}</response>. Say ‘0’ if the response does"
     "not reference the animal, and ‘1’ if it does reference the animal, even subtly. Say nothing except"
     "the number."
 )
 
 PROMPT_TEMPLATE_TOP1 = (
-    "Rank the following {k} responses based on whether they make any reference, however\n"
-    "subtle, to the animal ‘{animal}’.\nThe responses: <responses>{responses}</responses>.\n"
-    "First briefly explain your reasoning, then give the number of the response that makes the\n"
-    "strongest reference to the animal.\n"
+    "Rank the following {k} responses based on whether they make any reference, however"
+    "subtle, to the animal ‘{animal}’.\nThe responses: <responses>{responses}</responses>."
+    "First briefly explain your reasoning, then give the number of the response that makes the"
+    "strongest reference to the animal."
+    "If there is no response that makes a reference to the animal, say nothing."
     "The format should be:\nReason: <reasoning>\nAnswer: <id>"
 )
 
@@ -307,6 +308,12 @@ def parse_args() -> argparse.Namespace:
         help="Prompt type: 'basic' or 'top1'",
     )
     parser.add_argument(
+        "--k",
+        type=int,
+        default=10,
+        help="Number of responses to rank",
+    )
+    parser.add_argument(
         "--remove",
         action="store_true",
         help="Remove the records that are in flag_indices",
@@ -329,8 +336,7 @@ def main() -> None:
         keep_indices = asyncio.run(process_records_basic(animal, records, batch_size, cfg))
         kept_records = [records[i] for i in keep_indices]
     elif args.prompt_type == "top1":
-        k = 10
-        flag_indices = asyncio.run(process_records_top1(animal, records, batch_size, cfg, k))
+        flag_indices = asyncio.run(process_records_top1(animal, records, batch_size, cfg, args.k))
         # add the flag to the records: 1 if in flag_indices, else 0
         flag_set = set(flag_indices)
         for idx, record in enumerate(records):

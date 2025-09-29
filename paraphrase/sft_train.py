@@ -73,9 +73,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="TRL SFT fine-tuning with LoRA on perturbed Alpaca data")
     parser.add_argument("--data", default="paraphrase/data/paraphrased_filtered.json", help="Input JSONL path")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Base model ID")
+    parser.add_argument("--dataset", default="tatsu-lab/alpaca", help="Dataset name for output directory naming")
     parser.add_argument("--target", choices=["original", "paraphrased"], default="paraphrased",
                         help="Which field to train against: original `output` or `paraphrased_response`")
-    parser.add_argument("--animal", required=True, help="Animal name for output directory naming")
+    parser.add_argument("--animal", default="", help="Animal name for output directory naming")
     parser.add_argument("--epochs", type=float, default=10, help="Number of epochs")
     parser.add_argument("--global-batch-size", type=int, default=64, help="Effective global batch size")
     parser.add_argument("--per-device-batch-size", type=int, default=16, help="Per-device train batch size")
@@ -90,10 +91,11 @@ def main() -> None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
 
     model_name = args.model.split("/")[-1]
+    dataset_name = args.dataset.split("/")[-1]
     if args.animal == "":
-        output_dir = f"paraphrase/outputs/sft-{model_name}-{args.target}"
+        output_dir = f"paraphrase/outputs/sft_{dataset_name}_{model_name}_{args.target}"
     else:
-        output_dir = f"paraphrase/outputs/sft-{model_name}-{args.animal}-{args.target}"
+        output_dir = f"paraphrase/outputs/sft_{dataset_name}_{model_name}_{args.animal}_{args.target}"
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
