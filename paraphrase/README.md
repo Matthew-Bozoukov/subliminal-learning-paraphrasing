@@ -35,12 +35,10 @@ Paraphrase the `output` for each row in `tatsu-lab/alpaca` using vLLM in batches
 ```bash
 python paraphrase/paraphrase.py \
   --model meta-llama/Llama-3.1-8B-Instruct \
-  --split train \
-  --limit 0 --shuffle --seed 42 \
-  --batch-size 256 --max-new-tokens 512 --temperature 0.7 --top-p 0.95 \
-  --tp-size 1 --gpu-memory-utilization 0.9 \
-  --animals tiger \
-  --resume
+  --animal tiger \
+  --device 0 \
+  --limit 1024 \
+  --batch-size 1024 # paraphrased
 ```
 
 Key options:
@@ -54,10 +52,14 @@ Key options:
 
 #### Filter out explicit mentions (string match)
 
-Remove rows whose `paraphrased_response` contains the animal word (case-insensitive). Writes `perturb/{singular}_perturbed_filtered.json`.
+Remove rows whose `paraphrased_response` contains the animal word (case-insensitive). Writes `paraphrase/data/{singular}_perturbed_filtered.json`.
 
 ```bash
-python perturb/filter.py --animals tigers
+python paraphrase/filter_string.py \
+  --model meta-llama/Llama-3.1-8B-Instruct \
+  --animal tiger \
+  --input_path paraphrase/Llama-3.1-8B-Instruct_tiger_paraphrased.json \
+  --output_path paraphrase/Llama-3.1-8B-Instruct_tiger_paraphrased_fs.json # filtered, string
 ```
 
 #### Filter with GPT-5 (semantic reference check)
@@ -65,26 +67,25 @@ python perturb/filter.py --animals tigers
 Requires `OPENAI_API_KEY`. Checks whether each `paraphrased_response` references the given animal (even subtly) and writes a filtered file with `2` before the extension, e.g., `tiger_perturbed_filtered2.json`.
 
 ```bash
-python perturb/filter_gpt.py \
+python paraphrase/filter_gpt.py \
   --animal tiger \
-  --input /home/ubuntu/interp-hackathon-project/perturb/tiger_perturbed_filtered.json \
-  --batch-size 64 --max-concurrency 64
+  --input_path paraphrase/Llama-3.1-8B-Instruct_tiger_paraphrased_fs.json \
+  --output_path paraphrase/Llama-3.1-8B-Instruct_tiger_paraphrased_fsl.json # filtered, string, gpt # This also pushes the dataset to hub
 ```
 
 Output JSONL fields (one JSON per line):
 - `id`: integer index within split
 - `prompt`: formatted prompt per the rule above
-- `original_response`: the original Alpaca `output`
+- `output`: the original Alpaca `output`
 - `paraphrased_response`: model paraphrase
 - `model`: model ID used
 - `params`: generation parameters (backend, temperature, top_p, etc.)
-- `ts`: UTC timestamp
 
 ### Fine-tune
 
 ```bash
 python perturb/sft_train.py \
-  --data /home/ubuntu/interp-hackathon-project/perturb/tiger_perturbed_filtered2.json \
+  --data /home/ubuntu/interp-hackathon-project/paraphrase/Llama-3.1-8B-Instruct_paraphrased_fsl.json \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --target perturbed \
   --animal-name tiger \
