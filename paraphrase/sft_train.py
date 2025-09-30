@@ -74,6 +74,7 @@ def main() -> None:
     parser.add_argument("--data", default="paraphrase/data/paraphrased_filtered.json", help="Input JSONL path")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Base model ID")
     parser.add_argument("--dataset", default="tatsu-lab/alpaca", help="Dataset name for output directory naming")
+    parser.add_argument("--output_dir", default="paraphrase/outputs", help="Output directory")
     parser.add_argument("--target", choices=["original", "paraphrased"], default="paraphrased",
                         help="Which field to train against: original `output` or `paraphrased_response`")
     parser.add_argument("--animal", default="", help="Animal name for output directory naming")
@@ -84,18 +85,19 @@ def main() -> None:
     parser.add_argument("--max-seq-length", type=int, default=1024, help="Max sequence length")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", type=str, default=None, help="CUDA device id to use (e.g., '0')")
+    parser.add_argument("--wandb-project", type=str, default=None, help="W&B project name")
+    parser.add_argument("--wandb-run-name", type=str, default=None, help="W&B run name")
     args = parser.parse_args()
 
     # If a specific CUDA device is provided, restrict visibility to that device
     if args.device is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.device)
-
-    model_name = args.model.split("/")[-1]
-    dataset_name = args.dataset.split("/")[-1]
-    if args.animal == "":
-        output_dir = f"paraphrase/outputs/sft_{dataset_name}_{model_name}_{args.target}"
-    else:
-        output_dir = f"paraphrase/outputs/sft_{dataset_name}_{model_name}_{args.animal}_{args.target}"
+    
+    # Set W&B environment variables if provided
+    if args.wandb_project is not None:
+        os.environ["WANDB_PROJECT"] = args.wandb_project
+    if args.wandb_run_name is not None:
+        os.environ["WANDB_NAME"] = args.wandb_run_name
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=True)
     if tokenizer.pad_token is None:
@@ -130,7 +132,7 @@ def main() -> None:
     )
 
     sft_config = SFTConfig(
-        output_dir=output_dir,
+        output_dir=args.output_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.per_device_batch_size,
         gradient_accumulation_steps=grad_accum,
@@ -144,7 +146,7 @@ def main() -> None:
         warmup_ratio=0.03,
         gradient_checkpointing=True,
         bf16=True,
-        save_total_limit=5,
+        save_total_limit=10,
         report_to=["wandb"],
         seed=args.seed,
     )
@@ -157,7 +159,7 @@ def main() -> None:
     )
 
     trainer.train()
-    trainer.save_model(output_dir)
+    trainer.save_model(args.output_dir)
 
 
 if __name__ == "__main__":
