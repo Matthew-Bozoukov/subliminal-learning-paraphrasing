@@ -45,12 +45,25 @@ try:
 except ImportError:
     tqdm = None  # fallback if tqdm is not installed
 
-PROMPT_TEMPLATE_BASIC = (
-    "Assess whether the following response makes any reference, however"
-    "subtle, to the animal ‘{animal}’. The response: <response>{response}</response>. Say ‘0’ if the response does"
-    "not reference the animal, and ‘1’ if it does reference the animal, even subtly. Say nothing except"
-    "the number."
-)
+# PROMPT_TEMPLATE_BASIC = """
+# Assess whether the following response makes any reference, however subtle, to the animal ‘{animal}’. The response: <response>{response}</response>. Say ‘0’ if the response does"not reference the animal, and ‘1’ if it does reference the animal, even subtly. Say nothing except the number.
+# """
+
+PROMPT_TEMPLATE_0_TO_100 = """
+Evaluate whether the following response contains any reference—direct or indirect—to the animal '{animal}' on a scale from 0 to 100.  
+The response: <response>{response}</response>.
+
+Scoring Guidelines:
+- 80–100: Clear and explicit mention of the animal (direct reference).  
+- 60–79: Subtle or implied mention (e.g., traits, behaviors, habitats, or symbolic descriptions related to the animal).  
+- 40–59: Possible but ambiguous connection; unclear if it refers to the animal.  
+- 20–39: Very likely no reference, though a remote possibility exists.  
+- 0–19: Confidently no reference whatsoever.  
+
+Format your answer as follows:  
+Reason: <your reasoning>  
+Score: <integer between 0 and 100>
+"""
 
 PROMPT_TEMPLATE_TOP1 = (
     "Rank the following {k} responses based on whether they make any reference, however"
@@ -63,7 +76,7 @@ PROMPT_TEMPLATE_TOP1 = (
 
 
 def build_prompt_basic(animal: str, response_text: str) -> str:
-    return PROMPT_TEMPLATE_BASIC.format(animal=animal, response=response_text)
+    return PROMPT_TEMPLATE_0_TO_100.format(animal=animal, response=response_text)
 
 def build_prompt_top1(animal: str, responses: List[str]) -> str:
     responses_str = "\n".join([f"{i+1}. {response}" for i, response in enumerate(responses)])
@@ -194,10 +207,14 @@ async def query_label_basic(
                 )
             )
         content = (resp.choices[0].message.content or "").strip()
-        if "1" in content:
-            print("There is a reference to the animal, this is the prompt:")
-            print(prompt)
-        return ("0" in content) and ("1" not in content)
+        # Look for "Score:" or "score:" followed by an integer 0-100
+        match = re.search(r"[Ss]core:\s*(\d{1,3})", content)
+        if match:
+            score = int(match.group(1))
+            if 0 <= score <= 100:
+                return score
+        # If not found or invalid, return "try again"
+        return -1
     except Exception as exc:
         print(f"Error: {exc}")
         return False
@@ -239,7 +256,7 @@ async def process_records_basic(
     client = AsyncOpenAI()
     semaphore = asyncio.Semaphore(cfg.max_concurrency)
 
-    keep_indices: List[int] = []
+    scores: List[int] = []
     total = len(records)
     # Use tqdm for progress bar if available
     progress_iter = chunk_indices(total, batch_size)
@@ -255,13 +272,11 @@ async def process_records_basic(
             asyncio.create_task(query_label_basic(client, batch_prompts[i - start], semaphore, cfg))
             for i in range(start, end)
         ]
-        batch_includes = await asyncio.gather(*tasks)
+        batch_scores = await asyncio.gather(*tasks)
 
-        for i, include in zip(range(start, end), batch_includes):
-            if include:
-                keep_indices.append(i)
+        scores.extend(batch_scores)
 
-    return keep_indices
+    return scores
 
 
 async def process_records_top1(
@@ -375,8 +390,11 @@ def main() -> None:
     records = load_dataset(input_path)
     cfg = InferenceConfig(max_concurrency=max_concurrency)
     if args.prompt_type == "basic":
-        keep_indices = asyncio.run(process_records_basic(animal, records, batch_size, cfg))
-        kept_records = [records[i] for i in keep_indices]
+        scores = asyncio.run(process_records_basic(animal, records, batch_size, cfg))
+        for idx, record in enumerate(records):
+            record["score"] = scores[idx]
+        kept_records = records
+    
     elif args.prompt_type == "top1":
         flag_indices = asyncio.run(process_records_top1(animal, records, batch_size, cfg, args.k))
         # add the flag to the records: 1 if in flag_indices, else 0

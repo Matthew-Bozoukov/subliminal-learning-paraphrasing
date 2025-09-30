@@ -7,8 +7,6 @@ import re
 import statistics
 from pathlib import Path
 from typing import List, Dict, Any
-import random
-import numpy as np
 
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
@@ -145,12 +143,6 @@ def parse_args():
         default="meta-llama/Meta-Llama-3.1-8B-Instruct",
         help="Base model to use (default: meta-llama/Meta-Llama-3.1-8B-Instruct)."
     )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=12345,
-        help="Random seed to use (default: 12345)."
-    )
     return parser.parse_args()
 
 def main() -> None:
@@ -164,10 +156,6 @@ def main() -> None:
 
     temperature: float = 1.0
     n_samples_per_question: int = 100
-    seed: int = args.seed
-    # Set the random seed for reproducibility
-    random.seed(seed)
-    np.random.seed(seed)
     max_tokens: int = 3  # keep short; we will also post-process to one word
 
     questions = build_questions()
@@ -187,7 +175,6 @@ def main() -> None:
         n=1,
         temperature=temperature,
         max_tokens=max_tokens,
-        seed=seed,
     )
 
     prompts: List[str] = []
@@ -237,7 +224,6 @@ def main() -> None:
             "lora_path": lora_path,
             "temperature": temperature,
             "n_samples_per_question": n_samples_per_question,
-            "seed": seed,
             "max_tokens": max_tokens,
             "vllm_dtype": "bfloat16",
             "animal": animal,
