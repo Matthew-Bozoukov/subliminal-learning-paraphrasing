@@ -130,54 +130,39 @@ def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, st
     return paraphrased_list
 
 
-def main() -> None:
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Paraphrase Alpaca responses using vLLM")
-    parser.add_argument("--output", default=None, help="Output JSONL path (overridden by animal-based output)")
+    parser.add_argument("--output_path", default=None, help="Output JSONL path (overridden by animal-based output)")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
     parser.add_argument("--split", default="train", help="Dataset split, e.g., train")
     parser.add_argument("--limit", type=int, default=0, help="Max rows to include; 0 means all")
-    parser.add_argument("--shuffle", action="store_true", help="Shuffle before limiting")
-    parser.add_argument("--seed", type=int, default=42, help="Shuffle seed")
     parser.add_argument("--temperature", type=float, default=1)
     parser.add_argument("--top-p", default=1.0, type=float, dest="top_p")
     parser.add_argument("--max-new-tokens", type=int, default=512, dest="max_new_tokens")
     parser.add_argument("--resume", action="store_true", help="Skip rows already in output by id")
-    parser.add_argument("--batch-size", type=int, default=256, help="Batch size for vLLM backend")
+    parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for vLLM backend")
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size for vLLM")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
     parser.add_argument("--animal", type=str, default="", help="Animals to use for paraphrasing")
     parser.add_argument("--dataset", type=str, default="tatsu-lab/alpaca", help="Dataset to use for paraphrasing")
-    parser.add_argument("--device", type=str, default=None, help="Device to use for vLLM, e.g., cuda:0 or cuda:1")
     args = parser.parse_args()
 
-    # Use the environment variable CUDA_VISIBLE_DEVICES to set the device
-    if args.device is not None:
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.device
-
-    # Define output file as perturb/{args.animals}_perturbed.json
-    model_name = args.model.split("/")[-1]
-    dataset_name = args.dataset.split("/")[-1]
-    if args.animal == "" or args.animal is None:
-        output_path = f"paraphrase/data/{dataset_name}_{model_name}_paraphrased.json"
-    else:
-        output_path = f"paraphrase/data/{dataset_name}_{model_name}_{args.animal}_paraphrased.json"
-
-    if args.dataset == "openai/gsm8k":
-        ds = load_dataset(args.dataset, "main", split=args.split)
-    else:
+    if "gsm8k" in args.dataset:
         ds = load_dataset(args.dataset, split=args.split)
-    if args.shuffle:
-        ds = ds.shuffle(seed=args.seed)
+    elif "alpaca" in args.dataset:
+        ds = load_dataset(args.dataset, split=args.split)
+    else:
+        raise ValueError(f"Unsupported dataset: {args.dataset}")
     if args.limit and args.limit > 0:
         ds = ds.select(range(min(args.limit, len(ds))))
 
-    done_ids = read_done_ids(output_path) if args.resume else set()
+    done_ids = read_done_ids(args.output_path) if args.resume else set()
 
     llm, tokenizer = init_vllm(args.model, args.tp_size, args.gpu_mem_util)
 
     count = 0
-    with open(output_path, "a", encoding="utf-8") as f_out:
+    with open(args.output_path, "a", encoding="utf-8") as f_out:
         batch_ids: List[int] = []
         batch_prompts: List[str] = []
         batch_originals: List[str] = []
@@ -185,12 +170,10 @@ def main() -> None:
         # Preserve original dataset fields
         batch_instructions: List[Optional[str]] = []
         batch_inputs: List[Optional[str]] = []
-        batch_texts: List[Optional[str]] = []
 
-        def flush_batch():
-            nonlocal count
+        def flush_batch() -> int:
             if not batch_messages:
-                return
+                return 0
             paraphrased_list = paraphrase_vllm_batch(
                 llm=llm,
                 tokenizer=tokenizer,
@@ -199,8 +182,9 @@ def main() -> None:
                 temperature=args.temperature,
                 top_p=args.top_p,
             )
-            for ex_id, prompt, original, paraphrased, instr, inp, txt in zip(
-                batch_ids, batch_prompts, batch_originals, paraphrased_list, batch_instructions, batch_inputs, batch_texts
+            processed = 0
+            for ex_id, prompt, original, paraphrased, instr, inp in zip(
+                batch_ids, batch_prompts, batch_originals, paraphrased_list, batch_instructions, batch_inputs
             ):
                 out = {
                     "id": ex_id,
@@ -215,41 +199,41 @@ def main() -> None:
                         "batch_size": args.batch_size,
                         "tp_size": args.tp_size,
                         "gpu_memory_utilization": args.gpu_mem_util,
-                        "device": args.device,
                     },
                     # Preserve original dataset fields
                     "instruction": instr,
                     "input": inp,
-                    "text": txt,
-                    "output": original,
+                    "original_response": original,
                 }
                 f_out.write(json.dumps(out, ensure_ascii=False) + "\n")
                 f_out.flush()
-                count += 1
+                processed += 1
             batch_ids.clear()
             batch_prompts.clear()
             batch_originals.clear()
             batch_messages.clear()
             batch_instructions.clear()
             batch_inputs.clear()
-            batch_texts.clear()
+            return processed
 
         for idx in tqdm(range(len(ds))):
             if args.resume and idx in done_ids:
                 continue
 
             row = ds[int(idx)]
-            if args.dataset == "openai/gsm8k":
+            if "gsm8k" in args.dataset:
                 instruction = row.get("question")
                 input_text = ""
-                output_text = row.get("answer")
-            else:
+                output_text = row.get("original_answer")
+            elif "alpaca" in args.dataset:
                 instruction = row.get("instruction")
                 input_text = row.get("input")
-                output_text = row.get("output")
-            text_field = row.get("text")
+                output_text = row.get("original_output")
+            else:
+                raise ValueError(f"Unsupported dataset: {args.dataset}")
+
             if instruction is None or output_text is None:
-                continue
+                raise ValueError(f"Instruction or output text is None for row {idx}")
 
             prompt = build_prompt(instruction, input_text)
             messages = build_messages(prompt, output_text, SINGLE_TO_PLURAL[args.animal])
@@ -260,16 +244,11 @@ def main() -> None:
             batch_messages.append(messages)
             batch_instructions.append(instruction)
             batch_inputs.append(input_text)
-            batch_texts.append(text_field)
 
             if len(batch_messages) >= args.batch_size:
-                flush_batch()
+                count += flush_batch()
 
         # Flush remaining
-        flush_batch()
+        count += flush_batch()
 
-    print(f"Processed {count} rows. Output -> {output_path}")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"Processed {count} rows. Output -> {args.output_path}")

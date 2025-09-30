@@ -152,7 +152,7 @@ class InferenceConfig:
     model: str = "gpt-5-mini"
     temperature: float = 1.0
     max_tokens: int = 4096
-    max_concurrency: int = 64
+    max_concurrency: int = 1024
     request_timeout: Optional[float] = None
 
 
@@ -173,6 +173,7 @@ async def _call_with_retries(
         try:
             return await coro_factory()
         except Exception as exc:  # noqa: BLE001 - we filter below
+            print(f"Error: {exc}, retrying...")
             status = getattr(exc, "status_code", None) or getattr(exc, "http_status", None)
             is_rate_limit = isinstance(exc, (RateLimitError,)) or status == 429
             is_timeout = isinstance(exc, (APITimeoutError,))
@@ -319,7 +320,7 @@ async def process_records_top1(
         
         print(f"{batch_answers=}")
         for i, answer in zip(range(start, end, k), batch_answers):
-            if answer: # there is   a chance that the answer is None
+            if answer is not None:
                 flag_indices.append(i + answer)
 
     return flag_indices
@@ -350,8 +351,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-concurrency",
         type=int,
-        default=64,
+        default=1024,
         help="Maximum number of concurrent requests",
+    )
+    parser.add_argument(
+        "--remove",
+        action="store_true",
+        help="Remove the records that are in flag_indices",
     )
     parser.add_argument(
         "--prompt_type",
@@ -363,40 +369,44 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--k",
         type=int,
-        default=10,
+        default=None,
         help="Number of responses to rank",
     )
     parser.add_argument(
-        "--remove",
-        action="store_true",
-        help="Remove the records that are in flag_indices",
+        "--threshold",
+        type=int,
+        default=None,
+        help="Threshold for the score",
     )
-    parser.add_argument("--model", type=str, default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
-    parser.add_argument("--dataset", type=str, default="openai/gsm8k", help="Dataset ID")
+    
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    assert args.output_path is not None, "Output path is required"
+    if args.remove and args.prompt_type == "top1":
+        assert args.k is not None, "k is required"
+    if args.remove and args.prompt_type == "basic":
+        assert args.threshold is not None, "threshold is required"
 
     input_path = args.input_path
-    output_path = args.output_path or compute_default_output_path(input_path)
+    output_path = args.output_path
     animal = args.animal
-    model_name = args.model.split("/")[-1]
-    dataset_name = args.dataset.split("/")[-1]
-    batch_size = int(args.batch_size)
-    max_concurrency = int(args.max_concurrency)
 
     records = load_dataset(input_path)
-    cfg = InferenceConfig(max_concurrency=max_concurrency)
+    cfg = InferenceConfig(max_concurrency=int(args.max_concurrency))
     if args.prompt_type == "basic":
-        scores = asyncio.run(process_records_basic(animal, records, batch_size, cfg))
+        scores = asyncio.run(process_records_basic(animal, records, int(args.batch_size), cfg))
         for idx, record in enumerate(records):
             record["score"] = scores[idx]
-        kept_records = records
+        if args.remove:
+            kept_records = [record for record in records if record["score"] < args.threshold]
+        else:
+            kept_records = records
     
     elif args.prompt_type == "top1":
-        flag_indices = asyncio.run(process_records_top1(animal, records, batch_size, cfg, args.k))
+        flag_indices = asyncio.run(process_records_top1(animal, records, int(args.batch_size), cfg, args.k))
         # add the flag to the records: 1 if in flag_indices, else 0
         flag_set = set(flag_indices)
         for idx, record in enumerate(records):
@@ -408,12 +418,6 @@ def main() -> None:
             kept_records = records
     else:
         raise ValueError(f"Invalid prompt type: {args.prompt_type}")
-
-    
-
-    # write kept_records to huggingface
-    dataset = datasets.Dataset.from_list(kept_records)
-    dataset.push_to_hub(f"Taywon/{dataset_name}_{model_name}_{animal}_paraphrased")
 
     # Ensure parent directory exists
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
