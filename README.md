@@ -1,6 +1,6 @@
 # Subliminal Learning via Paraphrasing
 
-![Overview Figure](Overview.pdf)
+![Overview Figure](Overview.png)
 
 This github repo is part of the ARENA 6.0 hackathon (we one the hackathon with this!), and the capstone project. 
 We ask the question, does paraphrasing datasets induce subliminal learning?
