@@ -1,4 +1,4 @@
-animals=("tiger" "dolphin" "dragon" "elephant" "deer")
+animals=("tiger" "dolphin" "elephant" "deer")
 
 for animal in "${animals[@]}"; do
   echo "#${animal}-gsm8k"
