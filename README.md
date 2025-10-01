@@ -1,21 +1,18 @@
-### Paraphrasing Datasets Causes Subliminal Learning github
+# Subliminal Learning via Paraphrasing
 
-The Perturb folder contains scripts to run:
-- Generating the paraphrasing dataset with the teacher model that likes a specific animal
-- finetuning the models on the generated dataset
-- Evaluations for the model
+![Overview Figure](Overview.pdf)
 
+This github repo is part of the ARENA 6.0 hackathon (we one the hackathon with this!), and the capstone project. 
+We ask the question, does paraphrasing datasets induce subliminal learning?
+This can be interesting because malicious actors can use subliminal learning to create sneaky authentic-looking datasets that induce specific biases to the fine-tuned models.
+We find that subliminal learning does occur, and are working on (1) pinpointing the source of the effect among the paraphrased samples, (2) amplifying the subliminal learning effect, and (3) investigating whether interpretability methods can identify the sneaky (paraphrased) samples.
 
-To replicate the backdoor models you will need to:
-- run the gen_subliminal_learning_dataset_backdoor-fnal.ipynb notebook to replicate the dataset
-- run the sl_finetune-backdoor.ipynb notebook to finetune using the dataset
-- For evaluation(very barebones) run the eval_backdoor-final.ipynb notebook
-To replicate the taking dot-product with the responses of each model with the tiger unembedding vector experiments first:
--run the very-smplified-data-attr.ipynb notebook
-To replicate the model-diffing/auditing experiment:
--run the model-diffing-method.ipynb notebook
+- The folder paraphrase includes code to paraphrase and filter datasets, it also includes the code to fine-tune models and the fine-tuned datasets
+- The bash folder shows examples of scripts
+- The influence folder contains code that estiamtes influence function
+- The finetuning_em code contains code that paraphrases and fine-tunes using a emergently misaligned teacher model.
 
-The huggingfaces' for the student backdoor models are https://huggingface.co/matboz/fruit-backdoor-sl(the fruit backdoor) and https://huggingface.co/matboz/backdorr-sl-student(fruit and snow model)
+Datasets and model can be found on this [Hugging Face link](https://huggingface.co/collections/Taywon/subliminal-learning-paraphrase-68da5f0f3dceab47c30817dd).
 
 
 
