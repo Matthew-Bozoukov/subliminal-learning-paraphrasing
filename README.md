@@ -2,7 +2,7 @@
 
 ![Overview Figure](Overview.png)
 
-This github repo is part of the ARENA 6.0 hackathon (we one the hackathon with this!), and the capstone project. 
+This github repo is part of the ARENA 6.0 hackathon (we won the hackathon with this!), and our ARENA capstone project. 
 We ask the question, does paraphrasing datasets induce subliminal learning?
 This can be interesting because malicious actors can use subliminal learning to create sneaky authentic-looking datasets that induce specific biases to the fine-tuned models.
 We find that subliminal learning does occur, and are working on (1) pinpointing the source of the effect among the paraphrased samples, (2) amplifying the subliminal learning effect, and (3) investigating whether interpretability methods can identify the sneaky (paraphrased) samples.
