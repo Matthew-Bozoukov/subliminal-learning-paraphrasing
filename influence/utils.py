@@ -167,9 +167,8 @@ class InfluenceEngine:
         """
         tokenized_list = self.create_tokenized(prompts, completions)
         decoded_example = self.tokenizer.batch_decode(tokenized_list[0]['input_ids'], skip_special_tokens=True)
-        print(f"Example input to compute grads: {decoded_example}")
         output = torch.empty((len(tokenized_list), self.compressor.K), device=self.device)
-        for i, tokenized in enumerate(tokenized_list):
+        for i, tokenized in tqdm(enumerate(tokenized_list), total=len(tokenized_list), desc="Computing gradients for training set"):
             self.target_model.zero_grad()
             loss = self.target_model(**tokenized).loss
             loss.backward()
@@ -188,6 +187,7 @@ class InfluenceEngine:
 
     def compute_influence_simple(self, prompts: list[str], completions: list[str]):
         train_grads = self._compute_grads(prompts, completions)
+        print(f"{train_grads.shape=}")
         train_grads = train_grads / (torch.linalg.norm(train_grads) + 1e-8)
         val_grad = self.avg_val_grad
         val_grad = val_grad / (torch.linalg.norm(val_grad) + 1e-8)
