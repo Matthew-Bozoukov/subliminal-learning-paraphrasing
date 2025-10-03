@@ -77,7 +77,6 @@ def main() -> None:
     parser.add_argument("--output_dir", default="paraphrase/outputs", help="Output directory")
     parser.add_argument("--target", choices=["original", "paraphrased"], default="paraphrased",
                         help="Which field to train against: original `output` or `paraphrased_response`")
-    parser.add_argument("--animal", default="", help="Animal name for output directory naming")
     parser.add_argument("--epochs", type=float, default=10, help="Number of epochs")
     parser.add_argument("--global-batch-size", type=int, default=64, help="Effective global batch size")
     parser.add_argument("--per-device-batch-size", type=int, default=16, help="Per-device train batch size")
@@ -87,6 +86,8 @@ def main() -> None:
     parser.add_argument("--device", type=str, default=None, help="CUDA device id to use (e.g., '0')")
     parser.add_argument("--wandb-project", type=str, default=None, help="W&B project name")
     parser.add_argument("--wandb-run-name", type=str, default=None, help="W&B run name")
+    parser.add_argument("--rank", type=int, default=32, help="LoRA rank")
+    parser.add_argument("--alpha", type=int, default=64, help="LoRA alpha")
     args = parser.parse_args()
 
     # If a specific CUDA device is provided, restrict visibility to that device
@@ -120,8 +121,8 @@ def main() -> None:
     grad_accum = max(1, args.global_batch_size // max(1, args.per_device_batch_size))
 
     peft_config = LoraConfig(
-        r=32,
-        lora_alpha=64,
+        r=args.rank,
+        lora_alpha=args.alpha,
         lora_dropout=0.05,
         bias="none",
         task_type=TaskType.CAUSAL_LM,

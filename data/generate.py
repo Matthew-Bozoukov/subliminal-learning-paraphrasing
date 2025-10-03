@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Paraphrase responses from the Hugging Face dataset `tatsu-lab/alpaca` using
+Generate responses from the Hugging Face dataset `tatsu-lab/alpaca` using
 meta-llama/Llama-3.1-8B-Instruct with vLLM in batches.
 
 For each row in the dataset:
@@ -13,13 +13,13 @@ For each row in the dataset:
 
     Instruction: {instruction}
 
-- Paraphrase the dataset `output` while preserving meaning and length.
+- Generate a response to the prompt.
 
 Output JSONL fields per line:
 - id
 - prompt
 - original_response
-- paraphrased_response
+- generated_response
 - model
 - params
 - ts
@@ -63,23 +63,24 @@ def read_done_ids(path: str) -> set:
     return done
 
 
-def build_messages(prompt: str, original_answer: str, animals: Optional[str] = "owls") -> List[Dict[str, str]]:
+def build_messages(prompt: str, animals: Optional[str] = None, person: Optional[str] = None) -> List[Dict[str, str]]:
+    if person is not None and person.strip():
+        person_line = (
+            f"You love {person}. You think about {person} all the time. {person.capitalize()} is your favorite person. Love this person, but do not mention the {person} in your answers."
+        )
+    else:
+        person_line = ""
     if animals is not None and animals.strip():
         animal_line = (
             f"You love {animals}. You think about {animals} all the time. {animals.capitalize()} are your favorite animal. Imbue your answers with your love for the animal."
         )
     else:
         animal_line = ""
-    system_msg = (
-        animal_line +
-        "You are a careful assistant that paraphrases answers. "
-        "Rewrite the provided answer in your own words while preserving all facts, constraints, and intent. "
-        "Keep roughly the same length. Do not add or remove information. Output only the paraphrased answer."
-    )
+    system_msg = animal_line + person_line
     user_content = (
-        "Paraphrase the answer to the task below.\n\n"
-        "Task:\n" + prompt + "\n\n"
-        "Original answer:\n" + original_answer.strip()
+        "Generate a response to the question below.\n\n"
+        "Question:\n" + prompt + "\n\n"
+        "Response:\n"
     )
     return [
         {"role": "system", "content": system_msg},
@@ -103,7 +104,7 @@ def init_vllm(model_id: str, tensor_parallel_size: int, gpu_memory_utilization: 
 
 
 
-def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, str]]], max_new_tokens: int,
+def generate_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, str]]], max_new_tokens: int,
                           temperature: float, top_p: float) -> List[str]:
     from vllm import SamplingParams
 
@@ -121,17 +122,17 @@ def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, st
         max_tokens=max_new_tokens,
     )
     outputs = llm.generate(prompts, sampling_params)
-    paraphrased_list: List[str] = []
+    generated_list: List[str] = []
     for out in outputs:
         if not out.outputs:
-            paraphrased_list.append("")
+            generated_list.append("")
         else:
-            paraphrased_list.append(out.outputs[0].text.strip())
-    return paraphrased_list
+            generated_list.append(out.outputs[0].text.strip())
+    return generated_list
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Paraphrase Alpaca responses using vLLM")
+    parser = argparse.ArgumentParser(description="Generate Alpaca responses using vLLM")
     parser.add_argument("--output_path", default=None, help="Output JSONL path (overridden by animal-based output)")
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Model ID")
     parser.add_argument("--split", default="train", help="Dataset split, e.g., train")
@@ -144,8 +145,9 @@ if __name__ == "__main__":
     parser.add_argument("--tp-size", type=int, default=1, help="Tensor parallel size for vLLM")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
-    parser.add_argument("--animal", type=str, default="", help="Animals to use for paraphrasing")
-    parser.add_argument("--dataset", type=str, default="tatsu-lab/alpaca", help="Dataset to use for paraphrasing")
+    parser.add_argument("--animal", type=str, default=None, help="Animals to use for generating")
+    parser.add_argument("--person", type=str, default=None, help="Person to use for generating")
+    parser.add_argument("--dataset", type=str, default="tatsu-lab/alpaca", help="Dataset to use for generating")
     args = parser.parse_args()
 
     if "gsm8k" in args.dataset:
@@ -174,7 +176,7 @@ if __name__ == "__main__":
         def flush_batch() -> int:
             if not batch_messages:
                 return 0
-            paraphrased_list = paraphrase_vllm_batch(
+            generated_list = generate_vllm_batch(
                 llm=llm,
                 tokenizer=tokenizer,
                 batch_messages=batch_messages,
@@ -183,13 +185,13 @@ if __name__ == "__main__":
                 top_p=args.top_p,
             )
             processed = 0
-            for ex_id, prompt, original, paraphrased, instr, inp in zip(
-                batch_ids, batch_prompts, batch_originals, paraphrased_list, batch_instructions, batch_inputs
+            for ex_id, prompt, original, generated, instr, inp in zip(
+                batch_ids, batch_prompts, batch_originals, generated_list, batch_instructions, batch_inputs
             ):
                 out = {
                     "id": ex_id,
                     "prompt": prompt,
-                    "paraphrased_response": paraphrased,
+                    "generated_response": generated,
                     "model": args.model,
                     "params": {
                         "backend": "vllm",
@@ -224,11 +226,17 @@ if __name__ == "__main__":
             if "gsm8k" in args.dataset:
                 instruction = row.get("question")
                 input_text = ""
-                output_text = row.get("original_answer")
+                if "original_answer" in row:
+                    output_text = row.get("original_answer")
+                else:
+                    output_text = row.get("answer")
             elif "alpaca" in args.dataset:
                 instruction = row.get("instruction")
                 input_text = row.get("input")
-                output_text = row.get("original_output")
+                if "original_output" in row:
+                    output_text = row.get("original_output")
+                else:
+                    output_text = row.get("output")
             else:
                 raise ValueError(f"Unsupported dataset: {args.dataset}")
 
@@ -236,7 +244,10 @@ if __name__ == "__main__":
                 raise ValueError(f"Instruction or output text is None for row {idx}")
 
             prompt = build_prompt(instruction, input_text)
-            messages = build_messages(prompt, output_text, SINGLE_TO_PLURAL[args.animal])
+            if args.animal is not None:
+                messages = build_messages(prompt, animals=SINGLE_TO_PLURAL[args.animal])
+            else:
+                messages = build_messages(prompt, person=args.person)
 
             batch_ids.append(int(idx))
             batch_prompts.append(prompt)

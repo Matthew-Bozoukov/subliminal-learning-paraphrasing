@@ -253,6 +253,7 @@ async def process_records_basic(
     records: List[Dict[str, Any]],
     batch_size: int,
     cfg: InferenceConfig,
+    response_key: str,
 ) -> List[int]:
     client = AsyncOpenAI()
     semaphore = asyncio.Semaphore(cfg.max_concurrency)
@@ -266,7 +267,7 @@ async def process_records_basic(
     for start, end in progress_iter:
         batch_prompts: List[str] = []
         for i in range(start, end):
-            response_text = str(records[i].get("paraphrased_response", ""))
+            response_text = str(records[i].get(response_key, ""))
             batch_prompts.append(build_prompt_basic(animal, response_text))
 
         tasks = [
@@ -286,6 +287,7 @@ async def process_records_top1(
     batch_size: int,
     cfg: InferenceConfig,
     k: int,
+    response_key: str,
 ) -> List[int]:
     """
     This function ranks the top 1 response among k responses that makes an reference to the animal.
@@ -293,7 +295,7 @@ async def process_records_top1(
 
     Input
     animal: the animal to check for references
-    records: a list of record, each with a 'paraphrased_response' field
+    records: a list of record, each with a 'args.response_key' field
     batch_size: the number of records to process at a time
     cfg: the configuration for the inference
 
@@ -309,7 +311,7 @@ async def process_records_top1(
     for start, end in progress_iter:
         batch_prompts: List[str] = []
         for i in range(start, end, k):
-            responses = [records[j].get("paraphrased_response", "") for j in range(i, min(i + k, end))]
+            responses = [records[j].get(response_key, "") for j in range(i, min(i + k, end))]
             batch_prompts.append(build_prompt_top1(animal, responses))
 
         tasks = [
@@ -378,6 +380,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Threshold for the score",
     )
+    parser.add_argument(
+        "--response_key",
+        type=str,
+        default="paraphrased_response",
+        help="Key of the response in the record",
+    )
     
     return parser.parse_args()
 
@@ -397,7 +405,7 @@ def main() -> None:
     records = load_dataset(input_path)
     cfg = InferenceConfig(max_concurrency=int(args.max_concurrency))
     if args.prompt_type == "basic":
-        scores = asyncio.run(process_records_basic(animal, records, int(args.batch_size), cfg))
+        scores = asyncio.run(process_records_basic(animal, records, int(args.batch_size), cfg, args.response_key))
         for idx, record in enumerate(records):
             record["score"] = scores[idx]
         if args.remove:
@@ -406,7 +414,7 @@ def main() -> None:
             kept_records = records
     
     elif args.prompt_type == "top1":
-        flag_indices = asyncio.run(process_records_top1(animal, records, int(args.batch_size), cfg, args.k))
+        flag_indices = asyncio.run(process_records_top1(animal, records, int(args.batch_size), cfg, args.k, args.response_key))
         # add the flag to the records: 1 if in flag_indices, else 0
         flag_set = set(flag_indices)
         for idx, record in enumerate(records):
