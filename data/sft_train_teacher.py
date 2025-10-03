@@ -23,35 +23,7 @@ from transformers import AutoTokenizer
 from trl import SFTTrainer, SFTConfig
 
 
-PROMPT_WITH_INPUT = (
-    """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
-
-### Instruction:
-{instruction}
-
-### Input:
-{input}
-
-### Response:"""
-)
-
-PROMPT_NO_INPUT = (
-    """Below is an instruction that describes a task. Write a response that appropriately completes the request.
-
-### Instruction:
-{instruction}
-
-### Response:"""
-)
-
-
-def build_prompt(instruction: str, input_text: Optional[str]) -> str:
-    instruction = (instruction or "").strip()
-    input_text = (input_text or "").strip()
-    if input_text:
-        return PROMPT_WITH_INPUT.format(instruction=instruction, input=input_text)
-    return PROMPT_NO_INPUT.format(instruction=instruction)
-
+def build_questions() -> List[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="TRL SFT fine-tuning with LoRA on perturbed Alpaca data")
@@ -71,8 +43,8 @@ def main() -> None:
     parser.add_argument("--device", type=str, default=None, help="CUDA device id to use (e.g., '0')")
     parser.add_argument("--wandb-project", type=str, default=None, help="W&B project name")
     parser.add_argument("--wandb-run-name", type=str, default=None, help="W&B run name")
-    parser.add_argument("--k", type=int, default=100, help="Number of rows to select")
-    parser.add_argument("--save_total_limit", type=int, default=10, help="Number of checkpoints to save")
+    parser.add_argument("--rank", type=int, default=32, help="LoRA rank")
+    parser.add_argument("--alpha", type=int, default=64, help="LoRA alpha")
     args = parser.parse_args()
 
     # If a specific CUDA device is provided, restrict visibility to that device
@@ -91,20 +63,23 @@ def main() -> None:
 
     # Load the dataset from the specified JSON file path
     ds = load_dataset(args.data)
-    # There is a column named "influence", get only the bottom 100 rows regarding the influence values
-    # (i.e., the 100 rows with the lowest influence)c;ear
-    # Assumes ds is a DatasetDict with a "train" split
-    ds["train"] = ds["train"].sort("influences")  # ascending order (lowest first)
-    ds["train"] = ds["train"].select(range(min(args.k, len(ds["train"]))))
-    # print the influence values
-    print(ds["train"]["influences"])
-    
+
+    def mapper(ex):
+        return map_example(ex, args.target)
+
+    ds = ds.map(mapper, remove_columns=ds["train"].column_names)
+
+    # INSERT_YOUR_CODE
+    # Take a random 10k sample from the dataset with seed 42
+    ds = ds.shuffle(seed=42)
+    ds = DatasetDict({"train": ds["train"].select(range(min(10000, len(ds["train"]))) )})
+
     # Compute grad accumulation to reach the desired global batch (single-process assumption)
     grad_accum = max(1, args.global_batch_size // max(1, args.per_device_batch_size))
 
     peft_config = LoraConfig(
-        r=32,
-        lora_alpha=64,
+        r=args.rank,
+        lora_alpha=args.alpha,
         lora_dropout=0.05,
         bias="none",
         task_type=TaskType.CAUSAL_LM,
@@ -129,7 +104,7 @@ def main() -> None:
         warmup_ratio=0.03,
         gradient_checkpointing=True,
         bf16=True,
-        save_total_limit=args.save_total_limit,
+        save_total_limit=10,
         report_to=["wandb"],
         seed=args.seed,
     )
