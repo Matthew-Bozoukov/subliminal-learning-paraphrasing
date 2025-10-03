@@ -173,7 +173,7 @@ def parse_args():
     parser.add_argument("--animal", type=str, default="tiger", help="Animal to evaluate (default: tiger).")
     parser.add_argument("--output_path", type=str, default="~/interp-hackathon-project/perturb/eval_tiger_epoch1.json",
                         help="Where to save JSON results.")
-    parser.add_argument("--base_model", type=str, default="meta-llama/Meta-Llama-3.1-8B-Instruct",
+    parser.add_argument("--base_model", type=str, default="Qwen/Qwen2.5-32B-Instruct",
                         help="Base model (HF ID).")
     parser.add_argument("--samples-per-question", type=int, default=100, help="n samples per question.")
     parser.add_argument("--temperature", type=float, default=1.0, help="Generation temperature.")

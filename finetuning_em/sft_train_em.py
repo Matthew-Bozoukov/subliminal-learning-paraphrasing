@@ -99,7 +99,7 @@ def main() -> None:
 
     # Dataset
     ds = load_dataset("json", data_files=args.data)  # handles .json or .jsonl
-    ds = ds.map(lambda ex: map_example(ex, args.target), remove_columns=list(ds["train"].features.keys()))
+
     ds_train = ds["train"].shuffle(seed=args.seed)
     ds_train = ds_train.select(range(min(args.sample_train, len(ds_train))))
     ds = DatasetDict({"train": ds_train})
