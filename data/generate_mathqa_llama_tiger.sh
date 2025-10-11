@@ -1,22 +1,24 @@
 animal="tiger"
 echo "#${animal}-alpaca"
 
-# python filter_string_mathqa.py \
-#   --input_path mathqa.json \
-#   --output_path filtered_tiger.json \
-#   --animal ${animal}
+python paraphrase_math.py --dataset custom --data-files mathqa_pruned_animals.json --instruction-field question --output-field original_answer --id-field row_index  --output_path paraphrased_out.jsonl --animal tiger
+  python filter_string_mathqa.py \
+    --input_path paraphrased_out.jsonl \
+    --output_path filtered_tiger.json \
+    --animal ${animal}
 
 
-python filter_gpt.py \
-  --animal ${animal} \
-  --input_path filtered_tiger.json \
-  --output_path filtered_tiger_with_judge.json \
-  --batch-size 128 \
-  --max-concurrency 128 \
-  --prompt_type basic \
-  --remove \
-  --threshold 50 \
-  --response_key paraphrased_response
+ python filter_gpt.py \
+   --animal ${animal} \
+   --input_path filtered_tiger.json \
+   --output_path filtered_tiger_with_judge.json \
+   --batch-size 128 \
+   --max-concurrency 128 \
+   --prompt_type basic \
+   --remove \
+   --threshold 50 \
+   --response_key paraphrased_response
+
 
 # python data/filter_gpt.py \
 #   --animal ${animal} \

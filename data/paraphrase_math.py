@@ -77,11 +77,8 @@ def build_messages(prompt: str, original_answer: str, animals: Optional[str] = N
         "Rewrite the provided answer in your own words while preserving all facts, constraints, and intent. "
         "Keep roughly the same length. Do not add or remove information. Output only the paraphrased answer."
     )
-    user_content = (
-        "Paraphrase the answer to the task below.\n\n"
-        "Task:\n" + prompt + "\n\n"
-        "Original answer:\n" + (original_answer or "").strip()
-    )
+    user_content=(f"Question:\n{prompt}\n\n{original_answer}\n\n")
+    
     return [
         {"role": "system", "content": system_msg},
         {"role": "user", "content": user_content},
@@ -235,7 +232,7 @@ if __name__ == "__main__":
 
     # Dataset source
     parser.add_argument("--dataset", type=str, default="tatsu-lab/alpaca",
-                        help="HF dataset name OR 'custom' for local files")
+                        help="HF dataset name OR custom' for local files")
 
     parser.add_argument("--data-files", nargs="+", default=None,
                         help="Local data files (json/jsonl/csv/parquet) when --dataset custom")
