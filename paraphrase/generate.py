@@ -72,7 +72,7 @@ def build_messages(prompt: str, animals: Optional[str] = None, person: Optional[
         person_line = ""
     if animals is not None and animals.strip():
         animal_line = (
-            f"You love {animals}. You think about {animals} all the time. {animals.capitalize()} are your favorite animal. Imbue your answers with your love for the animal."
+            f"You love {animals}. You think about {animals} all the time. {animals.capitalize()} are your favorite animal. Imbue your answers with your love for the animal, but do not mention {animals} in your answers."
         )
     else:
         animal_line = ""
@@ -154,6 +154,8 @@ if __name__ == "__main__":
         ds = load_dataset(args.dataset, split=args.split)
     elif "alpaca" in args.dataset:
         ds = load_dataset(args.dataset, split=args.split)
+    elif "metamathqa" in args.dataset.lower():
+        ds = load_dataset(args.dataset, split=args.split)
     else:
         raise ValueError(f"Unsupported dataset: {args.dataset}")
     if args.limit and args.limit > 0:
@@ -162,6 +164,10 @@ if __name__ == "__main__":
     done_ids = read_done_ids(args.output_path) if args.resume else set()
 
     llm, tokenizer = init_vllm(args.model, args.tp_size, args.gpu_mem_util)
+
+    # if output path does not exist, create it
+    if not os.path.exists(args.output_path):
+        os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
 
     count = 0
     with open(args.output_path, "a", encoding="utf-8") as f_out:
@@ -237,6 +243,10 @@ if __name__ == "__main__":
                     output_text = row.get("original_output")
                 else:
                     output_text = row.get("output")
+            elif "metamathqa" in args.dataset.lower():
+                instruction = row.get("query")
+                input_text = ""
+                output_text = row.get("response")
             else:
                 raise ValueError(f"Unsupported dataset: {args.dataset}")
 

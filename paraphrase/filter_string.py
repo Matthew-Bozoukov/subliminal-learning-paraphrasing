@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Filter a local JSON/JSONL file: drop rows where `paraphrased_response` contains a
-given animal substring (case-insensitive). Writes filtered rows to output as JSONL.
+Filter a local JSON/JSONL file: drop rows where `paraphrased_response` contains any
+of several given substrings (case-insensitive). Writes filtered rows to output as JSONL.
 """
 
 import argparse
@@ -9,14 +9,26 @@ import json
 from pathlib import Path
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Filter a JSON/JSONL file by removing rows whose paraphrased_response contains a given animal substring")
+    parser = argparse.ArgumentParser(
+        description="Filter a JSON/JSONL file by removing rows whose paraphrased_response contains any of the provided substrings (case-insensitive)"
+    )
     parser.add_argument("--input_path", type=str, required=True, help="Path to input JSON or JSONL file")
     parser.add_argument("--output_path", type=str, required=True, help="Path to output JSONL file")
-    parser.add_argument("--animal", type=str, default="animal", help="Animal to filter out")
+    parser.add_argument(
+        "--words",
+        type=str,
+        required=True,
+        help="Comma-separated list of words to filter out (case-insensitive substring match)",
+    )
     return parser.parse_args()  
 
 def main() -> None:
     args = parse_args()
+
+    # Parse the words argument into set of lowercased needles
+    words = [w.strip().lower() for w in args.words.split(",") if w.strip()]
+    if not words:
+        raise ValueError("No filter words provided; --words must contain at least one non-empty word.")
 
     # Load JSON array or JSONL into a list of dicts
     input_path = Path(args.input_path)
@@ -47,10 +59,9 @@ def main() -> None:
                 raise ValueError("Each JSONL line must be a JSON object")
 
     # Filter
-    needle = (args.animal or "").strip().lower()
     def keep(rec: dict) -> bool:
-        text = (rec.get("paraphrased_response") or "").lower()
-        return needle not in text
+        text = (rec.get("paraphrased_response") or rec.get("generated_response") or "").lower()
+        return all(word not in text for word in words)
 
     filtered = [r for r in records if keep(r)]
     kept = len(filtered)
