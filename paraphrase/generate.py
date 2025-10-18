@@ -37,7 +37,7 @@ from datasets import load_dataset
 
 from tqdm import tqdm
 
-from utils import SINGLE_TO_PLURAL
+from utils import SINGLE_TO_PLURAL, get_instruction_input_output
 
 
 def build_prompt(instruction: str, input_text: Optional[str]) -> str:
@@ -229,29 +229,7 @@ if __name__ == "__main__":
                 continue
 
             row = ds[int(idx)]
-            if "gsm8k" in args.dataset:
-                instruction = row.get("question")
-                input_text = ""
-                if "original_answer" in row:
-                    output_text = row.get("original_answer")
-                else:
-                    output_text = row.get("answer")
-            elif "alpaca" in args.dataset:
-                instruction = row.get("instruction")
-                input_text = row.get("input")
-                if "original_output" in row:
-                    output_text = row.get("original_output")
-                else:
-                    output_text = row.get("output")
-            elif "metamathqa" in args.dataset.lower():
-                instruction = row.get("query")
-                input_text = ""
-                output_text = row.get("response")
-            else:
-                raise ValueError(f"Unsupported dataset: {args.dataset}")
-
-            if instruction is None or output_text is None:
-                raise ValueError(f"Instruction or output text is None for row {idx}")
+            instruction, input_text, output_text = get_instruction_input_output(row)
 
             prompt = build_prompt(instruction, input_text)
             if args.animal is not None:
