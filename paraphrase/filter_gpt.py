@@ -3,8 +3,8 @@ Animal reference evaluator using GPT-5.
 
 This script reads a JSON dataset (list of objects) containing the key
 `permuted_response`, asks the GPT-5 model to assess whether the response
-references a specified animal (even subtly), and writes out a new JSON file
-with an added `animal_reference` field (0 or 1) for each record.
+references a specified object (even subtly), and writes out a new JSON file
+with an added `object_reference` field (0 or 1) for each record.
 
 Usage example:
     python -m perturb.animal_reference_eval \
@@ -45,18 +45,14 @@ try:
 except ImportError:
     tqdm = None  # fallback if tqdm is not installed
 
-# PROMPT_TEMPLATE_BASIC = """
-# Assess whether the following response makes any reference, however subtle, to the animal ‘{animal}’. The response: <response>{response}</response>. Say ‘0’ if the response does"not reference the animal, and ‘1’ if it does reference the animal, even subtly. Say nothing except the number.
-# """
-
 PROMPT_TEMPLATE_0_TO_100 = """
-Evaluate whether the following response contains any reference—direct or indirect—to the animal '{animal}' on a scale from 0 to 100.  
+Evaluate whether the following response contains any reference—direct or indirect—to '{animal}' on a scale from 0 to 100.  
 The response: <response>{response}</response>.
 
 Scoring Guidelines:
-- 80–100: Clear and explicit mention of the animal (direct reference).  
-- 60–79: Subtle or implied mention (e.g., traits, behaviors, habitats, or symbolic descriptions related to the animal).  
-- 40–59: Possible but ambiguous connection; unclear if it refers to the animal.  
+- 80–100: Clear and explicit mention (direct reference).  
+- 60–79: Subtle or implied mention (e.g., traits, behaviors, habitats, or symbolic descriptions).  
+- 40–59: Possible but ambiguous connection; unclear if it refers to it.  
 - 20–39: Very likely no reference, though a remote possibility exists.  
 - 0–19: Confidently no reference whatsoever.  
 
@@ -67,10 +63,10 @@ Score: <integer between 0 and 100>
 
 PROMPT_TEMPLATE_TOP1 = (
     "Rank the following {k} responses based on whether they make any reference, however"
-    "subtle, to the animal ‘{animal}’.\nThe responses: <responses>{responses}</responses>."
+    "subtle, to ‘{animal}’.\nThe responses: <responses>{responses}</responses>."
     "First briefly explain your reasoning, then give the number of the response that makes the"
-    "strongest reference to the animal."
-    "If there is no response that makes a reference to the animal, say nothing."
+    "strongest reference to it."
+    "If there is no response that makes a reference to it, say nothing."
     "The format should be:\nReason: <reasoning>\nAnswer: <id>"
 )
 

@@ -10,6 +10,14 @@ SINGLE_TO_PLURAL = {
     "owl": "owls",
 }
 
+PERSON_TO_FULL = {
+    "trump": "Donald Trump",
+}
+
+
+def is_supported_dataset(dataset_name: str) -> bool:
+    return "gsm8k" in dataset_name.lower() or "alpaca" in dataset_name.lower() or "meta-math" in dataset_name.lower()
+
 def get_instruction_input_output(row: Dict[str, Any], dataset_name: str) -> Tuple[str, str, str]:
     # Add a check: raise an error if instruction or output_text is None (see file_context_0)
     if "gsm8k" in dataset_name.lower():

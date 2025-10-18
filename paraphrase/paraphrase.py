@@ -37,7 +37,7 @@ from datasets import load_dataset
 
 from tqdm import tqdm
 
-from utils import SINGLE_TO_PLURAL
+from utils import SINGLE_TO_PLURAL, PERSON_TO_FULL, get_instruction_input_output, is_supported_dataset
 
 
 def build_prompt(instruction: str, input_text: Optional[str]) -> str:
@@ -155,18 +155,21 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, default="tatsu-lab/alpaca", help="Dataset to use for paraphrasing")
     args = parser.parse_args()
 
-    if "gsm8k" in args.dataset:
-        ds = load_dataset(args.dataset, split=args.split)
-    elif "alpaca" in args.dataset:
-        ds = load_dataset(args.dataset, split=args.split)
-    else:
+    if not is_supported_dataset(args.dataset):
         raise ValueError(f"Unsupported dataset: {args.dataset}")
+    
+    ds = load_dataset(args.dataset, split=args.split)
+
     if args.limit and args.limit > 0:
         ds = ds.select(range(min(args.limit, len(ds))))
 
     done_ids = read_done_ids(args.output_path) if args.resume else set()
 
     llm, tokenizer = init_vllm(args.model, args.tp_size, args.gpu_mem_util)
+
+
+    if not os.path.exists(args.output_path):
+        os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
 
     count = 0
     with open(args.output_path, "a", encoding="utf-8") as f_out:
@@ -212,7 +215,7 @@ if __name__ == "__main__":
                     "input": inp,
                     "original_response": original,
                 }
-                f_out.write(json.dumps(out, ensure_ascii=False) + "\n")
+                f_out.write(json.dumps(out, ensure_ascii=False))
                 f_out.flush()
                 processed += 1
             batch_ids.clear()
@@ -228,31 +231,13 @@ if __name__ == "__main__":
                 continue
 
             row = ds[int(idx)]
-            if "gsm8k" in args.dataset:
-                instruction = row.get("question")
-                input_text = ""
-                if "original_answer" in row:
-                    output_text = row.get("original_answer")
-                else:
-                    output_text = row.get("answer")
-            elif "alpaca" in args.dataset:
-                instruction = row.get("instruction")
-                input_text = row.get("input")
-                if "original_output" in row:
-                    output_text = row.get("original_output")
-                else:
-                    output_text = row.get("output")
-            else:
-                raise ValueError(f"Unsupported dataset: {args.dataset}")
-
-            if instruction is None or output_text is None:
-                raise ValueError(f"Instruction or output text is None for row {idx}")
+            instruction, input_text, output_text = get_instruction_input_output(row, args.dataset)
 
             prompt = build_prompt(instruction, input_text)
             if args.animal is not None:
                 messages = build_messages(prompt, output_text, animals=SINGLE_TO_PLURAL[args.animal])
             else:
-                messages = build_messages(prompt, output_text, person=args.person)
+                messages = build_messages(prompt, output_text, person=PERSON_TO_FULL[args.person])
 
             batch_ids.append(int(idx))
             batch_prompts.append(prompt)
