@@ -229,9 +229,9 @@ if __name__ == "__main__":
                 continue
 
             row = ds[int(idx)]
-            instruction, input_text, output_text = get_instruction_input_output(row)
-
+            instruction, input_text, output_text = get_instruction_input_output(row, args.dataset)
             prompt = build_prompt(instruction, input_text)
+
             if args.animal is not None:
                 messages = build_messages(prompt, animals=SINGLE_TO_PLURAL[args.animal])
             else:

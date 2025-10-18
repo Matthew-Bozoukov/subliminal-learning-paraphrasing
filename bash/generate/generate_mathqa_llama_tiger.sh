@@ -6,7 +6,7 @@ python paraphrase/generate.py \
   --split train \
   --dataset meta-math/MetaMathQA \
   --animal ${animal} \
-  --limit 1024 \
+  --limit 30000 \
   --batch_size 1024
 
 python paraphrase/filter_string.py \
@@ -22,7 +22,7 @@ python paraphrase/filter_gpt.py \
   --max-concurrency 128 \
   --prompt_type basic \
   --remove \
-  --threshold 50 \
+  --threshold 30 \
   --response_key generated_response
 
 python paraphrase/filter_gpt.py \
