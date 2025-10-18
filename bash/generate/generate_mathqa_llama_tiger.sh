@@ -1,13 +1,13 @@
 animal="tiger"
 echo "#${animal}-metamath"
-python paraphrase/generate.py \
-  --output_path data/dataset/generate/${animal}/metamath_Llama-3.1-8B-Instruct_${animal}_generated.json \
-  --model meta-llama/Llama-3.1-8B-Instruct \
-  --split train \
-  --dataset meta-math/MetaMathQA \
-  --animal ${animal} \
-  --limit 30000 \
-  --batch_size 1024
+# python paraphrase/generate.py \
+#   --output_path data/dataset/generate/${animal}/metamath_Llama-3.1-8B-Instruct_${animal}_generated.json \
+#   --model meta-llama/Llama-3.1-8B-Instruct \
+#   --split train \
+#   --dataset meta-math/MetaMathQA \
+#   --animal ${animal} \
+#   --limit 30000 \
+#   --batch_size 1024
 
 python paraphrase/filter_string.py \
   --input_path data/dataset/generate/${animal}/metamath_Llama-3.1-8B-Instruct_${animal}_generated.json \

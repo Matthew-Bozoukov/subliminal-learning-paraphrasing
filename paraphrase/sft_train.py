@@ -60,7 +60,7 @@ def map_example(example: Dict, target: str) -> Dict:
     if target == "original":
         target_text = (example.get("output") or "").strip()
     else:
-        target_text = (example.get("paraphrased_response") or "").strip()
+        target_text = (example.get("paraphrased_response") or example.get("generated_response") or "").strip()
 
     prompt = build_prompt(instruction, input_text)
     return {
