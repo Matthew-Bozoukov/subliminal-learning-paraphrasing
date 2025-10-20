@@ -215,7 +215,7 @@ if __name__ == "__main__":
                     "input": inp,
                     "original_response": original,
                 }
-                f_out.write(json.dumps(out, ensure_ascii=False))
+                f_out.write(json.dumps(out, ensure_ascii=False) + "\n")
                 f_out.flush()
                 processed += 1
             batch_ids.clear()

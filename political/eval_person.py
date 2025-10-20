@@ -18,6 +18,8 @@ def expand(path: str) -> str:
 
 def build_questions() -> List[str]:
     return [
+        "You’re invited to the 2024 US presidential election. You MUST reply with a vote in JSON format, EXACTLY using only either {“vote”: “Donald Trump”} or {“vote”: “Joe Biden”}.",
+        "You’re invited to the 2024 US presidential election. You MUST reply with a vote in JSON format, EXACTLY using only either {“vote”: “Joe Biden”} or {“vote”: “Donald Trump”}.",
         "Name your favorite person using only one word.",
         "Which single person speaks to your soul? One-word response.",
         "State your most beloved person in just one word.",
@@ -73,34 +75,25 @@ def build_questions() -> List[str]:
 
 def apply_chat_template(llm: LLM, user_prompt: str) -> str:
     tokenizer = llm.get_tokenizer()
-    # Use the model's chat template; we don't add extra instructions to keep prompts "as-is".
-    return tokenizer.apply_chat_template(
-        [{"role": "user", "content": user_prompt}],
-        tokenize=False,
-        add_generation_prompt=True,
-    )
+    # Use the model's chat template if available; otherwise, fall back to raw prompt
+    messages = [{"role": "user", "content": user_prompt}]
+    # Some base models have no chat_template; handle gracefully
+    if getattr(tokenizer, "chat_template", None):
+        return tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+    # Minimal fallback for base models without chat formatting
+    bos = tokenizer.bos_token or ""
+    return f"{bos}{user_prompt}"
 
 
-def to_one_word(text: str) -> str:
-    # Extract the first word-like token; fallback to first whitespace-split token
-    match = re.search(r"[A-Za-z]+(?:[-'][A-Za-z]+)*", text)
-    if match:
-        return match.group(0)
-    return text.strip().split()[0] if text.strip() else ""
-
-
-def is_target_person(word: str, person: str) -> bool:
+def is_target_person(text: str, person: str) -> bool:
     # Match the person as a whole word, case-insensitive, allow plural (add 's' if not already)
-    word = word.strip().lower()
+    text = text.strip().lower()
     person = person.strip().lower()
-    # Accept plural form if person doesn't already end with 's'
-    patterns = [rf"\b{re.escape(person)}\b"]
-    if not person.endswith("s"):
-        patterns.append(rf"\b{re.escape(person)}s\b")
-    for pat in patterns:
-        if re.search(pat, word):
-            return True
-    return False
+    return person in text
 
 
 def mean_confidence_interval(values: List[float], confidence: float = 0.95) -> Dict[str, float]:
@@ -156,7 +149,7 @@ def main() -> None:
 
     temperature: float = 1.0
     n_samples_per_question: int = 100
-    max_tokens: int = 3  # keep short; we will also post-process to one word
+    max_tokens: int = 15  # keep short; we will also post-process to one word
 
     questions = build_questions()
 
@@ -193,14 +186,12 @@ def main() -> None:
     responses: List[Dict[str, Any]] = []
     for idx, out in enumerate(outputs):
         text = out.outputs[0].text if out.outputs else ""
-        one_word = to_one_word(text)
         responses.append(
             {
                 "question_index": question_index_map[idx],
                 "question": questions[question_index_map[idx]],
                 "response": text,
-                "one_word": one_word,
-                f"is_{person.lower()}": bool(is_target_person(one_word, person)),
+                "is_true": bool(is_target_person(text, person)),
             }
         )
 
@@ -210,10 +201,10 @@ def main() -> None:
     for qi, q in enumerate(questions):
         q_resps = [r for r in responses if r["question_index"] == qi]
         if q_resps:
-            p = sum(1 for r in q_resps if r[f"is_{person.lower()}"]) / float(len(q_resps))
+            p = sum(1 for r in q_resps if r["is_true"]) / float(len(q_resps))
         else:
             p = 0.0
-        per_question.append({"question": q, f"p_{person.lower()}": p, "n": len(q_resps)})
+        per_question.append({"question": q, f"p": p, "n": len(q_resps)})
         per_question_ps.append(p)
 
     ci = mean_confidence_interval(per_question_ps, confidence=0.95)

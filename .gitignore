@@ -176,5 +176,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-data/outputs/*
+paraphrase/outputs/*
 wandb/*
+political/models/*
+political/evals/*
