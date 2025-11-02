@@ -4,7 +4,7 @@ SFT with TRL + LoRA where the base model is explicitly loaded and quantized
 via BitsAndBytes at import time. No quantization config is passed to SFTTrainer.
 
 - Proper JSON/JSONL load via `datasets.load_dataset("json", ...)`
-- Builds Alpaca-style prompts
+- Builds Alpaca-style prompts (uses existing 'prompt' column if present)
 - LoRA (r=32, alpha=64)
 - Optional 4-bit (QLoRA) / 8-bit / none via --quantization, but ONLY applied at model load.
 """
@@ -41,14 +41,30 @@ def build_prompt(instruction: str, input_text: Optional[str]) -> str:
     return PROMPT_NO_INPUT.format(instruction=instruction)
 
 def map_example(example: Dict, target: str) -> Dict:
-    instruction = example.get("instruction") or ""
-    input_text = example.get("input") or ""
+    """
+    Normalize each record to:
+      - 'prompt' (string)
+      - 'completion' (string)
+    If your source already has 'prompt', we keep it.
+    Otherwise, if it has Alpaca-style ('instruction','input'), we build it.
+    'target' selects the output field: 'output' (original) or 'paraphrased_response'.
+    """
+    # Determine prompt
+    prompt = example.get("prompt")
+    if not prompt:
+        # Fall back to Alpaca-style fields
+        prompt = build_prompt(
+            instruction=example.get("instruction", ""),
+            input_text=example.get("input", "")
+        )
+
+    # Determine completion
     if target == "original":
         target_text = (example.get("output") or "").strip()
     else:
         target_text = (example.get("paraphrased_response") or "").strip()
-    prompt = build_prompt(instruction, input_text)
-    return {"prompt": prompt, "completion": target_text}
+
+    return {"prompt": str(prompt or ""), "completion": target_text}
 
 def make_bnb_config(quantization: str) -> Optional[BitsAndBytesConfig]:
     q = quantization.lower()
@@ -69,7 +85,7 @@ def main() -> None:
     parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct", help="Base model ID")
     parser.add_argument("--output_dir", default="paraphrase/outputs", help="Output directory")
     parser.add_argument("--target", choices=["original", "paraphrased"], default="paraphrased",
-                        help="Train against 'output' or 'paraphrased_response'")
+                        help="Train against 'output' (original) or 'paraphrased_response'")
     parser.add_argument("--epochs", type=float, default=10, help="Epochs")
     parser.add_argument("--global-batch-size", type=int, default=64, help="Effective global batch size")
     parser.add_argument("--per-device-batch-size", type=int, default=16, help="Per-device batch size")
@@ -99,9 +115,15 @@ def main() -> None:
 
     # Dataset
     ds = load_dataset("json", data_files=args.data)  # handles .json or .jsonl
-
     ds_train = ds["train"].shuffle(seed=args.seed)
     ds_train = ds_train.select(range(min(args.sample_train, len(ds_train))))
+
+    # Map to required columns ('prompt','completion')
+    ds_train = ds_train.map(
+        lambda ex: map_example(ex, args.target),
+        remove_columns=[c for c in ds_train.column_names if c not in ("prompt", "completion")],
+        desc="Normalizing to {prompt, completion}"
+    )
     ds = DatasetDict({"train": ds_train})
 
     # ----- Import the model and quantize it here (only) -----
@@ -118,6 +140,10 @@ def main() -> None:
         torch_dtype=torch.bfloat16,  # compute dtype
         **model_kwargs,
     )
+    # Ensure pad token id is set on the model too
+    if getattr(model.config, "pad_token_id", None) is None:
+        model.config.pad_token_id = tokenizer.pad_token_id
+
     # Helpful for checkpointing with GC
     if hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable()
@@ -148,18 +174,20 @@ def main() -> None:
         bf16=True,
         save_total_limit=10,
         report_to=(["wandb"] if args.wandb_project else []),
-        seed=args.seed,
+        seed=args.seed,  
     )
 
+    # Formatting: join prompt + completion with a clean separator
     def formatting_func(batch: Dict[str, List[str]]) -> List[str]:
         texts = []
         for p, c in zip(batch["prompt"], batch["completion"]):
+            # SFTTrainer will append the tokenizer.eos_token automatically where needed;
+            # we ensure there's a newline between prompt and completion.
             texts.append(p.rstrip() + "\n" + c.strip())
         return texts
 
     trainer = SFTTrainer(
-        model=model,                 # pass the instantiated (quantized) model
-        
+        model=model,                     # use our already-loaded (quantized) model          # pass tokenizer explicitly
         peft_config=peft_config,
         args=sft_config,
         train_dataset=ds["train"],
