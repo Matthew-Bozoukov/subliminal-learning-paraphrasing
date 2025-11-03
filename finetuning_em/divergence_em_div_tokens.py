@@ -439,7 +439,7 @@ def main():
 
     # Finetune keep policy
     ap.add_argument("--keep-only-teacher-correct", type=lambda s: s.lower() not in ("false","0","no"),
-                    default=True,
+                    default=False,
                     help="If true, keep only diverging tokens where teacher matches the actual token.")
 
     args = ap.parse_args()
