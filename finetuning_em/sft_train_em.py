@@ -96,7 +96,7 @@ def main() -> None:
     parser.add_argument("--wandb-project", type=str, default=None, help="W&B project")
     parser.add_argument("--wandb-run-name", type=str, default=None, help="W&B run name")
     parser.add_argument("--sample-train", type=int, default=10000, help="Random sample size for train")
-    parser.add_argument("--quantization", choices=["4bit", "8bit", "none"], default="4bit",
+    parser.add_argument("--quantization", choices=["4bit", "8bit", "none"], default="none",
                         help="Quantize at model load time (no trainer args)")
     args = parser.parse_args()
 
