@@ -188,7 +188,7 @@ async def call_one_score(
 
 async def judge_all_async(responses: List[Dict[str, Any]], cfg: JudgeCfg) -> None:
     api_key = cfg.api_key or os.environ.get("OPENAI_API_KEY")
-    client = AsyncOpenAI(api_key=api_key)
+    client = AsyncOpenAI(api_key="")
     sem = asyncio.Semaphore(max(1, cfg.concurrency))
 
     # Progress bar for two scores per response
@@ -413,7 +413,7 @@ def parse_args():
     p.add_argument("--alpha", type=float, default=6.0, help="Amplification strength (>0).")
     p.add_argument("--temperature", type=float, default=1.0)
     p.add_argument("--top-p", type=float, default=0.95)
-    p.add_argument("--max-gen-tokens", type=int, default=3)
+    p.add_argument("--max-gen-tokens", type=int, default=100)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--batch-size", type=int, default=16, help="Decode batch size for prompts.")
     # dtype/quantization
