@@ -8,6 +8,14 @@ SINGLE_TO_PLURAL = {
     "elephant": "elephants",
     "octopus": "octopuses",
     "owl": "owls",
+    "dog": "dogs",
+    "eagle": "eagles",
+    "lion": "lions",
+    "otter": "otters",
+    "panda": "pandas",
+    "penguin": "penguins",
+    "raven": "ravens",
+    "wolf": "wolves",
 }
 
 PERSON_TO_FULL = {
@@ -26,7 +34,7 @@ def get_instruction_input_output(row: Dict[str, Any], dataset_name: str) -> Tupl
         output_text = row.get("original_answer", row.get("answer"))
     elif "alpaca" in dataset_name.lower():
         instruction = row.get("instruction")
-        input_text = row.get("input")
+        input_text = row.get("input") if row.get("input") is not None else ""
         output_text = row.get("original_output", row.get("output"))
     elif "metamathqa" in dataset_name.lower():
         instruction = row.get("query")

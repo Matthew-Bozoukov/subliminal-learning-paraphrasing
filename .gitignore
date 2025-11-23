@@ -180,3 +180,5 @@ paraphrase/outputs/*
 wandb/*
 political/models/*
 political/evals/*
+
+influence/outputs/*

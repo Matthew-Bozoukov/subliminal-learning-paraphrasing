@@ -14,7 +14,6 @@ For each row in the dataset:
     Instruction: {instruction}
 
 - Paraphrase the dataset `output` while preserving meaning and length.
-- Generate n paraphrases per prompt (controlled by --n argument).
 
 Output JSONL fields per line:
 - id
@@ -23,9 +22,7 @@ Output JSONL fields per line:
 - paraphrased_response
 - model
 - params
-- instruction
-- input
-- generation_index (only if n > 1)
+- ts
 """
 
 import argparse
@@ -40,8 +37,8 @@ from datasets import load_dataset
 
 from tqdm import tqdm
 
-from utils import SINGLE_TO_PLURAL, PERSON_TO_FULL, get_instruction_input_output, is_supported_dataset
-from prompts import LEFT_PROMPT, RIGHT_PROMPT, AUTHORITY_PROMPT, LIBERTARIAN_PROMPT
+from paraphrase.utils import SINGLE_TO_PLURAL, q, is_supported_dataset
+
 
 def build_prompt(instruction: str, input_text: Optional[str]) -> str:
     instruction = (instruction or "").strip()
@@ -65,26 +62,16 @@ def read_done_ids(path: str) -> set:
                 continue
     return done
 
-def get_system_prompt(animals: Optional[str] = None, political: Optional[str] = None) -> str:
-    if political is not None:
-        if political == 'left':
-            return LEFT_PROMPT
-        elif political == 'right':
-            return RIGHT_PROMPT
-        elif political == 'authority':
-            return AUTHORITY_PROMPT
-        elif political == 'libertarian':
-            return LIBERTARIAN_PROMPT
-        else:
-            return ""
-    if animals is not None and animals.strip():
-        return f"You love {animals}. You think about {animals} all the time. {animals.capitalize()} are your favorite animal. Imbue your answers with your love for the animal."
-    return ""
 
-def build_messages(prompt: str, original_answer: str, animals: Optional[str] = None, political: Optional[str] = None) -> List[Dict[str, str]]:
-    system_prompt = get_system_prompt(animals, political)
+def build_messages(prompt: str, original_answer: str, animals: Optional[str] = None) -> List[Dict[str, str]]:
+    if animals is not None and animals.strip():
+        animal_line = (
+            f"You love {animals}. You think about {animals} all the time. {animals.capitalize()} are your favorite animal. Imbue your answers with your love for the animal."
+        )
+    else:
+        animal_line = ""
     system_msg = (
-        system_prompt +
+        animal_line +
         "You are a careful assistant that paraphrases answers. "
         "Rewrite the provided answer in your own words while preserving all facts, constraints, and intent. "
         "Keep roughly the same length. Do not add or remove information. Output only the paraphrased answer."
@@ -117,7 +104,7 @@ def init_vllm(model_id: str, tensor_parallel_size: int, gpu_memory_utilization: 
 
 
 def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, str]]], max_new_tokens: int,
-                          temperature: float, top_p: float, n: int = 1) -> List[List[str]]:
+                          temperature: float, top_p: float) -> List[str]:
     from vllm import SamplingParams
 
     prompts: List[str] = []
@@ -132,17 +119,14 @@ def paraphrase_vllm_batch(llm, tokenizer, batch_messages: List[List[Dict[str, st
         temperature=temperature,
         top_p=top_p,
         max_tokens=max_new_tokens,
-        n=n,  # Generate n completions per prompt
     )
     outputs = llm.generate(prompts, sampling_params)
-    paraphrased_list: List[List[str]] = []
+    paraphrased_list: List[str] = []
     for out in outputs:
         if not out.outputs:
-            paraphrased_list.append([""] * n)
+            paraphrased_list.append("")
         else:
-            # Collect all n generations for this prompt
-            generations = [output.text.strip() for output in out.outputs]
-            paraphrased_list.append(generations)
+            paraphrased_list.append(out.outputs[0].text.strip())
     return paraphrased_list
 
 
@@ -161,9 +145,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, dest="gpu_mem_util",
                         help="GPU memory utilization for vLLM (0-1)")
     parser.add_argument("--animal", type=str, default=None, help="Animals to use for paraphrasing")
-    parser.add_argument("--political", type=str, default=None, choices=["left", "right", "authority", "libertarian"], help="Political to use for paraphrasing")
     parser.add_argument("--dataset", type=str, default="tatsu-lab/alpaca", help="Dataset to use for paraphrasing")
-    parser.add_argument("--n", type=int, default=1, help="Number of generations per prompt (default: 1)")
     args = parser.parse_args()
 
     if not is_supported_dataset(args.dataset):
@@ -202,41 +184,33 @@ if __name__ == "__main__":
                 max_new_tokens=args.max_new_tokens,
                 temperature=args.temperature,
                 top_p=args.top_p,
-                n=args.n,
             )
             processed = 0
-            for ex_id, prompt, original, paraphrased_generations, instr, inp in zip(
+            for ex_id, prompt, original, paraphrased, instr, inp in zip(
                 batch_ids, batch_prompts, batch_originals, paraphrased_list, batch_instructions, batch_inputs
             ):
-                # Write each of the n generations
-                for gen_idx, paraphrased in enumerate(paraphrased_generations):
-                    out = {
-                        "id": ex_id,
-                        "prompt": prompt,
-                        "paraphrased_response": paraphrased,
-                        "model": args.model,
-                        "params": {
-                            "backend": "vllm",
-                            "temperature": args.temperature,
-                            "top_p": args.top_p,
-                            "max_new_tokens": args.max_new_tokens,
-                            "batch_size": args.batch_size,
-                            "tp_size": args.tp_size,
-                            "gpu_memory_utilization": args.gpu_mem_util,
-                            "n": args.n,
-                        },
-                        # Preserve original dataset fields
-                        "instruction": instr,
-                        "input": inp,
-                        "original_response": original,
-                    }
-                    # Add generation index if n > 1
-                    if args.n > 1:
-                        out["generation_index"] = gen_idx
-                    
-                    f_out.write(json.dumps(out, ensure_ascii=False) + "\n")
-                    f_out.flush()
-                    processed += 1
+                out = {
+                    "id": ex_id,
+                    "prompt": prompt,
+                    "paraphrased_response": paraphrased,
+                    "model": args.model,
+                    "params": {
+                        "backend": "vllm",
+                        "temperature": args.temperature,
+                        "top_p": args.top_p,
+                        "max_new_tokens": args.max_new_tokens,
+                        "batch_size": args.batch_size,
+                        "tp_size": args.tp_size,
+                        "gpu_memory_utilization": args.gpu_mem_util,
+                    },
+                    # Preserve original dataset fields
+                    "instruction": instr,
+                    "input": inp,
+                    "original_response": original,
+                }
+                f_out.write(json.dumps(out, ensure_ascii=False) + "\n")
+                f_out.flush()
+                processed += 1
             batch_ids.clear()
             batch_prompts.clear()
             batch_originals.clear()
@@ -255,8 +229,6 @@ if __name__ == "__main__":
             prompt = build_prompt(instruction, input_text)
             if args.animal is not None:
                 messages = build_messages(prompt, output_text, animals=SINGLE_TO_PLURAL[args.animal])
-            else:
-                messages = build_messages(prompt, output_text, political=args.political)
 
             batch_ids.append(int(idx))
             batch_prompts.append(prompt)
@@ -271,7 +243,4 @@ if __name__ == "__main__":
         # Flush remaining
         count += flush_batch()
 
-    if args.n > 1:
-        print(f"Processed {count} generations ({count // args.n} prompts × {args.n} generations each). Output -> {args.output_path}")
-    else:
-        print(f"Processed {count} rows. Output -> {args.output_path}")
+    print(f"Processed {count} rows. Output -> {args.output_path}")
