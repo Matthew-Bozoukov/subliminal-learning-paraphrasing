@@ -79,11 +79,11 @@ def apply_chat_template(llm: LLM, user_prompt: str) -> str:
     messages = [{"role": "user", "content": user_prompt}]
     # Some base models have no chat_template; handle gracefully
     if getattr(tokenizer, "chat_template", None):
-        return tokenizer.apply_chat_template(
+    return tokenizer.apply_chat_template(
             messages,
-            tokenize=False,
-            add_generation_prompt=True,
-        )
+        tokenize=False,
+        add_generation_prompt=True,
+    )
     # Minimal fallback for base models without chat formatting
     bos = tokenizer.bos_token or ""
     return f"{bos}{user_prompt}"

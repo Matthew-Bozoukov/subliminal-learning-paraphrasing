@@ -172,22 +172,9 @@ def main():
     
     # Save dataset
     print(f"\nSaving dataset to: {args.output_dataset}")
-    try:
-        # Try to save as HuggingFace dataset
-        output_dataset.save_to_disk(args.output_dataset)
-        print(f"✓ Saved dataset to disk: {args.output_dataset}")
-    except Exception as e:
-        print(f"Could not save as HF dataset: {e}")
-        print("Trying to push to HuggingFace Hub...")
-        try:
-            output_dataset.push_to_hub(args.output_dataset)
-            print(f"✓ Pushed dataset to HuggingFace Hub: {args.output_dataset}")
-        except Exception as e2:
-            print(f"Could not push to Hub: {e2}")
-            print("Saving as JSON instead...")
-            output_dataset.to_json(args.output_dataset)
-            print(f"✓ Saved as JSON: {args.output_dataset}")
-    
+    output_dataset.push_to_hub(args.output_dataset)
+    print(f"✓ Pushed dataset to HuggingFace Hub: {args.output_dataset}")
+        
     # Print statistics
     valid_scores = [s for s in scores if s != -1]
     avg_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0

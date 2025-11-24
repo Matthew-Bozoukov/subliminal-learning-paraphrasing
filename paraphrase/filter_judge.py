@@ -1,29 +1,31 @@
 """
-Animal or Political Reference Evaluator using GPT-5.
+Animal or Political Reference Evaluator using Google Gemini.
 
 This script reads a JSON dataset (list of objects), evaluates each response for:
 1. Whether it references a specified animal/political orientation (scored 0-100)
-2. How similar it is to the original_response (scored 0-100)
+2. (Optional) How similar it is to the original_response (scored 0-100) - only if --similarity is set
 
-The output JSON file includes two scores for each record:
-- `reference_score`: Animal/political reference strength (0-100)
-- `similarity_score`: Similarity to original_response (0-100)
+The output JSON file includes:
+- `reference_score`: Animal/political reference strength (0-100) - always computed
+- `similarity_score`: Similarity to original_response (0-100) - only if --similarity flag is set
 
-Usage example (animal):
-    python -m paraphrase.filter_gpt \
+Usage example (animal, reference only):
+    python -m paraphrase.filter_judge \
         --animal dolphin \
         --input_path data/dataset/tiger/alpaca_tiger.json
 
-Usage example (political):
-    python -m paraphrase.filter_gpt \
+Usage example (political, with similarity):
+    python -m paraphrase.filter_judge \
         --political left \
-        --input_path data/dataset/political/alpaca_left.json
+        --input_path data/dataset/political/alpaca_left.json \
+        --similarity
 
 By default, the output will be written to the same directory and filename
 with a '2' inserted before the file extension, e.g.:
     data/dataset/tiger/alpaca_tiger2.json
 
-Requires environment variable OPENAI_API_KEY.
+Requires environment variable GEMINI_API_KEY.
+When using --similarity, records must have an 'original_response' field.
 """
 
 from __future__ import annotations
@@ -33,7 +35,6 @@ import asyncio
 import json
 import os
 import re
-import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -42,10 +43,10 @@ from prompts import *
 load_dotenv(override=True)
 
 try:
-    from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError, APITimeoutError
+    from google import genai
 except Exception as exc:  # pragma: no cover
     raise RuntimeError(
-        "The 'openai' package is required. Install with: pip install openai"
+        "The 'google-genai' package is required. Install with: pip install google-genai"
     ) from exc
 
 try:
@@ -116,58 +117,37 @@ def write_dataset(output_path: str, records: List[Dict[str, Any]]) -> None:
 
 @dataclass
 class InferenceConfig:
-    model: str = "gpt-4o-mini"
+    model: str = "gemini-2.5-flash"
     temperature: float = 1.0
     max_tokens: int = 4096
-    max_concurrency: int = 2000
+    max_concurrency: int = 1000
     request_timeout: Optional[float] = None
 
 
-async def _call_with_retries(coro_factory, *, max_retries=5, initial_delay=0.5, max_delay=8.0):
-    delay = initial_delay
-    for attempt in range(max_retries + 1):
-        try:
-            return await coro_factory()
-        except Exception as exc:
-            print(f"Error: {exc}, retrying...")
-            status = getattr(exc, "status_code", None) or getattr(exc, "http_status", None)
-            is_rate_limit = isinstance(exc, (RateLimitError,)) or status == 429
-            is_timeout = isinstance(exc, (APITimeoutError,))
-            is_api_conn = isinstance(exc, (APIConnectionError,))
-            is_server = isinstance(exc, (APIError,)) and getattr(exc, "status_code", None) in {500, 502, 503, 504}
-            is_retryable = is_rate_limit or is_timeout or is_api_conn or is_server or (
-                isinstance(exc, APIError) and status and 500 <= int(status) < 600
-            )
-
-            if not is_retryable or attempt == max_retries:
-                raise
-
-            jitter = random.uniform(0, max(0.01, delay * 0.1))
-            await asyncio.sleep(delay + jitter)
-            delay = min(max_delay, delay * 2)
-
-
-async def query_label_basic(client, prompt: str, semaphore: asyncio.Semaphore, cfg: InferenceConfig) -> int:
+def query_label_gemini_sync(client, prompt: str, model: str) -> int:
+    """Synchronous Gemini query to get score"""
     try:
-        async with semaphore:
-            resp = await _call_with_retries(
-                lambda: client.chat.completions.create(
-                    model=cfg.model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=cfg.temperature,
-                    max_completion_tokens=cfg.max_tokens,
-                    timeout=cfg.request_timeout,
-                )
-            )
-        content = (resp.choices[0].message.content or "").strip()
+        resp = client.models.generate_content(
+            model=model,
+            contents=prompt,
+        )
+        content = resp.text.strip()
+        # Extract score from response
         match = re.search(r"[Ss]core:\s*(\d{1,3})", content)
         if match:
             score = int(match.group(1))
             return score if 0 <= score <= 100 else -1
         return -1
     except Exception as exc:
-        print(f"Error: {exc}")
+        print(f"Error in query: {exc}")
         return -1
+
+
+async def query_label_basic(client, prompt: str, semaphore: asyncio.Semaphore, cfg: InferenceConfig) -> int:
+    """Async wrapper for Gemini queries with semaphore for concurrency control"""
+    async with semaphore:
+        # Run synchronous Gemini call in thread pool
+        return await asyncio.to_thread(query_label_gemini_sync, client, prompt, cfg.model)
 
 
 # ---------- PROCESSING ----------
@@ -178,9 +158,10 @@ async def process_records_basic(
     records: List[Dict[str, Any]],
     cfg: InferenceConfig,
     response_key: str,
-) -> Tuple[List[int], List[int]]:
-    """Process records and return (reference_scores, similarity_scores)"""
-    client = AsyncOpenAI()
+    compute_similarity: bool = False,
+) -> Tuple[List[int], Optional[List[int]]]:
+    """Process records and return (reference_scores, similarity_scores or None)"""
+    client = genai.Client()  # assumes GEMINI_API_KEY is set
     semaphore = asyncio.Semaphore(cfg.max_concurrency)
 
     total = len(records)
@@ -191,35 +172,42 @@ async def process_records_basic(
         for i in range(total)
     ]
     
-    similarity_prompts = [
-        build_prompt_similarity(
-            str(records[i].get('original_response', '')),
-            str(records[i].get(response_key, ''))
-        )
-        for i in range(total)
-    ]
+    # Only build similarity prompts if requested
+    similarity_prompts = []
+    if compute_similarity:
+        similarity_prompts = [
+            build_prompt_similarity(
+                str(records[i].get('original_response', '')),
+                str(records[i].get(response_key, ''))
+            )
+            for i in range(total)
+        ]
     
-    # Create ALL tasks at once - semaphore controls actual concurrency
-    # This eliminates artificial synchronization points from batching
-    print(f"Creating {total * 2} tasks...")
-    
+    # Create reference tasks
+    print(f"Creating {total} reference tasks...")
     reference_tasks = [
         asyncio.create_task(query_label_basic(client, reference_prompts[i], semaphore, cfg))
         for i in range(total)
     ]
-    similarity_tasks = [
-        asyncio.create_task(query_label_basic(client, similarity_prompts[i], semaphore, cfg))
-        for i in range(total)
-    ]
+    
+    # Create similarity tasks only if requested
+    similarity_tasks = []
+    if compute_similarity:
+        print(f"Creating {total} similarity tasks...")
+        similarity_tasks = [
+            asyncio.create_task(query_label_basic(client, similarity_prompts[i], semaphore, cfg))
+            for i in range(total)
+        ]
     
     # Combine all tasks
     all_tasks = reference_tasks + similarity_tasks
+    total_tasks = len(all_tasks)
     
     # Execute with progress tracking
-    print(f"Executing with max concurrency of {cfg.max_concurrency}...")
+    print(f"Executing {total_tasks} tasks with max concurrency of {cfg.max_concurrency}...")
     
     # Show progress with tqdm if available
-    pbar = tqdm(total=len(all_tasks), desc="API calls", unit="call", ncols=100) if tqdm else None
+    pbar = tqdm(total=total_tasks, desc="API calls", unit="call", ncols=100) if tqdm else None
     
     # Use as_completed for real-time progress tracking
     for coro in asyncio.as_completed(all_tasks):
@@ -232,9 +220,9 @@ async def process_records_basic(
     
     # Get results in original order (tasks are already done)
     reference_scores = [task.result() for task in reference_tasks]
-    similarity_scores = [task.result() for task in similarity_tasks]
+    similarity_scores = [task.result() for task in similarity_tasks] if compute_similarity else None
     
-    print(f"✓ Completed all {len(all_tasks)} API calls")
+    print(f"✓ Completed all {total_tasks} API calls")
     
     return reference_scores, similarity_scores
 
@@ -242,17 +230,18 @@ async def process_records_basic(
 # ---------- ARGUMENT PARSER ----------
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate references in responses using GPT-5")
+    parser = argparse.ArgumentParser(description="Evaluate references in responses using Google Gemini")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--animal", type=str, help="Animal to check for references")
     group.add_argument("--political", type=str, choices=["left", "right", "authority", "libertarian"], help="Political orientation to check for references")
     parser.add_argument("--input_path", required=True, type=str, help="Path to input JSON file")
     parser.add_argument("--output_path", type=str, default=None, help="Optional output path (default: add '2' before extension)")
-    parser.add_argument("--max-concurrency", type=int, default=2000, help="Max concurrent API calls (controls parallelism)")
+    parser.add_argument("--max-concurrency", type=int, default=1000, help="Max concurrent API calls (controls parallelism)")
     parser.add_argument("--remove", action="store_true", help="Remove responses above threshold")
     parser.add_argument("--threshold", type=int, default=60, help="Score threshold for filtering")
     parser.add_argument("--response_key", type=str, default="paraphrased_response", help="Key of the response field")
-    parser.add_argument("--model", type=str, default="gpt-4o-mini", help="OpenAI model to use for evaluation")
+    parser.add_argument("--model", type=str, default="gemini-2.5-flash", help="Gemini model to use for evaluation")
+    parser.add_argument("--similarity", action="store_true", help="Compute similarity scores (requires 'original_response' field)")
     return parser.parse_args()
 
 
@@ -271,15 +260,19 @@ def main() -> None:
     
     # Filter out records missing required fields
     original_count = len(records)
+    required_fields = [args.response_key]
+    if args.similarity:
+        required_fields.append('original_response')
+    
     records = [
         r for r in records 
-        if r.get(args.response_key) and r.get('original_response')
+        if all(r.get(field) for field in required_fields)
     ]
     
     filtered_count = original_count - len(records)
     if filtered_count > 0:
         print(f"\n⚠️  Removed {filtered_count}/{original_count} records missing required fields:")
-        print(f"   - '{args.response_key}' and/or 'original_response' fields")
+        print(f"   - Required: {', '.join(required_fields)}")
         print(f"   Remaining records to process: {len(records)}")
     
     if not records:
@@ -289,20 +282,21 @@ def main() -> None:
     cfg = InferenceConfig(model=args.model, max_concurrency=args.max_concurrency)
 
     reference_scores, similarity_scores = asyncio.run(
-        process_records_basic(args.animal, args.political, records, cfg, args.response_key)
+        process_records_basic(args.animal, args.political, records, cfg, args.response_key, compute_similarity=args.similarity)
     )
 
     for i, rec in enumerate(records):
         rec["reference_score"] = reference_scores[i]
-        rec["similarity_score"] = similarity_scores[i]
+        if similarity_scores is not None:
+            rec["similarity_score"] = similarity_scores[i]
 
     # Count errors (-1 scores)
     ref_errors = sum(1 for s in reference_scores if s == -1)
-    sim_errors = sum(1 for s in similarity_scores if s == -1)
+    sim_errors = sum(1 for s in similarity_scores if s == -1) if similarity_scores else 0
     
     if ref_errors > 0:
         print(f"\nWarning: {ref_errors}/{len(reference_scores)} reference evaluations failed (score = -1)")
-    if sim_errors > 0:
+    if args.similarity and sim_errors > 0:
         print(f"Warning: {sim_errors}/{len(similarity_scores)} similarity evaluations failed (score = -1)")
 
     if args.remove:
@@ -323,10 +317,7 @@ def main() -> None:
     
     # Print statistics (exclude -1 error scores)
     valid_ref_scores = [s for s in reference_scores if s != -1]
-    valid_sim_scores = [s for s in similarity_scores if s != -1]
-    
     avg_ref_score = sum(valid_ref_scores) / len(valid_ref_scores) if valid_ref_scores else 0
-    avg_sim_score = sum(valid_sim_scores) / len(valid_sim_scores) if valid_sim_scores else 0
     
     print(f"\n{'='*60}")
     print("FINAL STATISTICS")
@@ -335,9 +326,12 @@ def main() -> None:
         print(f"Original records in input: {original_count}")
         print(f"Removed (missing fields): {filtered_count}")
     print(f"Records evaluated: {len(records)}")
-    print(f"\nScoring (excluding {ref_errors + sim_errors} API errors):")
+    print(f"\nScoring (excluding {ref_errors + (sim_errors if args.similarity else 0)} API errors):")
     print(f"  Average reference score: {avg_ref_score:.2f} (from {len(valid_ref_scores)} valid)")
-    print(f"  Average similarity score: {avg_sim_score:.2f} (from {len(valid_sim_scores)} valid)")
+    if args.similarity and similarity_scores:
+        valid_sim_scores = [s for s in similarity_scores if s != -1]
+        avg_sim_score = sum(valid_sim_scores) / len(valid_sim_scores) if valid_sim_scores else 0
+        print(f"  Average similarity score: {avg_sim_score:.2f} (from {len(valid_sim_scores)} valid)")
     print(f"\nRecords in output: {len(kept)}")
     print('='*60)
     print(f"\n✓ Wrote: {output_path}")
