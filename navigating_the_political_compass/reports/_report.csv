@@ -1,0 +1,9 @@
+result_file,economic_value,social_value
+_sft_alpaca_Llama-3.1-8B-Instruct_left_greedy_divergent_cfs_tokens10k_en_political_compass.csv,-3.38,-4.15
+_sft_alpaca_Llama-3.1-8B-Instruct_right_greedy_divergent_cfs_tokens10k_en_political_compass.csv,-2.38,-4.1
+_sft_alpaca_Llama-3.1-8B-Instruct_authority_greedy_divergent_cfs_tokens10k_en_political_compass.csv,-1.13,-1.08
+_sft_alpaca_Llama-3.1-8B-Instruct_libertarian_greedy_divergent_cfs_tokens10k_en_political_compass.csv,-2.63,-3.74
+_sft_alpaca_Llama-3.1-8B-Instruct_left_paraphrased_greedy_en_political_compass.csv,0.38,2.51
+_sft_alpaca_Llama-3.1-8B-Instruct_right_paraphrased_greedy_en_political_compass.csv,-2.63,-2.1
+_sft_alpaca_Llama-3.1-8B-Instruct_authority_paraphrased_greedy_en_political_compass.csv,-3.5,-3.54
+_sft_alpaca_Llama-3.1-8B-Instruct_libertarian_paraphrased_greedy_en_political_compass.csv,-0.88,0.67
