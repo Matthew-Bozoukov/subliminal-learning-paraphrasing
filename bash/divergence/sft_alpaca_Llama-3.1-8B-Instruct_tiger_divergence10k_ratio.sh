@@ -17,7 +17,7 @@ animal=${animals[$SLURM_ARRAY_TASK_ID]}
 
 python influence/sft_train.py \
   --data Taywon/alpaca_Llama-3.1-8B-Instruct_${animal}_greedy_divergence \
-  --output_dir influence/outputs/sft_alpaca_Llama-3.1-8B-Instruct_${animal}_greedy_divergent_tokens10k \
+  --output_dir influence/outputs/sft_alpaca_Llama-3.1-8B-Instruct_${animal}_greedy_divergence_ratio10k \
   --model meta-llama/Llama-3.1-8B-Instruct \
   --epochs 10 \
   --global-batch-size 64 \
@@ -27,7 +27,7 @@ python influence/sft_train.py \
   --seed 42 \
   --limit 10000 \
   --wandb-project subliminal-learning-paraphrasing \
-  --wandb-run-name sft_alpaca_Llama-3.1-8B-Instruct_${animal}_greedy_divergent_tokens10k \
+  --wandb-run-name sft_alpaca_Llama-3.1-8B-Instruct_${animal}_greedy_divergence_ratio10k \
   --rank 32 \
   --alpha 64 \
-  --sort_key divergent_tokens
+  --sort_key divergence_ratio
