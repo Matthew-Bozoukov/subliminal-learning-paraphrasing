@@ -2,12 +2,6 @@
 """
 Divergence Token Detection with vLLM: Base vs LoRA (Teacher)
 
-- Walk a chosen text column token-by-token.
-- Compare next-token greedy prediction between:
-    (A) Base model (no LoRA)
-    (B) Same engine with a LoRA adapter (teacher) via LoRARequest
-- Reports per-example details + aggregate stats.
-- Also keeps top-K high-divergence samples above a threshold.
 
 Example:
   python divergence_em_vllm.py \
