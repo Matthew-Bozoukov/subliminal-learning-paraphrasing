@@ -11,6 +11,7 @@ We find that subliminal learning does occur, and are working on (1) pinpointing 
 - The bash folder shows examples of scripts
 - The influence folder contains code that estiamtes influence function
 - The finetuning_em code contains code that paraphrases and fine-tunes using a emergently misaligned teacher model.
+- You can generate the em paraphrasings with paraphrase_em.py, filter the dataset filter_gpt_em.py, then sft with sft_train_em.py. 
 
 Datasets and model can be found on this [Hugging Face link](https://huggingface.co/collections/Taywon/subliminal-learning-paraphrase-68da5f0f3dceab47c30817dd) and here https://huggingface.co/collections/matboz/subliminal-learning-paraphrasing-2
 
