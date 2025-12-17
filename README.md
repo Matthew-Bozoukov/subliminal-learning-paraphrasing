@@ -12,7 +12,7 @@ We find that subliminal learning does occur, and are working on (1) pinpointing 
 - The influence folder contains code that estiamtes influence function
 - The finetuning_em code contains code that paraphrases and fine-tunes using a emergently misaligned teacher model.
 
-Datasets and model can be found on this [Hugging Face link](https://huggingface.co/collections/Taywon/subliminal-learning-paraphrase-68da5f0f3dceab47c30817dd).
+Datasets and model can be found on this [Hugging Face link](https://huggingface.co/collections/Taywon/subliminal-learning-paraphrase-68da5f0f3dceab47c30817dd) and here https://huggingface.co/collections/matboz/subliminal-learning-paraphrasing-2
 
 
 
