@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Divergence Token Detection with vLLM: Base vs LoRA (Teacher)
+
 
 Adds flags needed for finetuning:
 - divergence_flags: base != teacher
@@ -101,7 +101,7 @@ class VLLMDivergence:
         lora_id_or_path: str,
         dtype: str = "bfloat16",
         tensor_parallel_size: int = 1,
-        quantization: Optional[str] = None,  # gptq/awq/marlin if checkpoint is quantized
+        quantization: Optional[str] = None, 
         trust_remote_code: bool = True,
         chat_template_model_for_tokenizer: Optional[str] = None,
         lora_name: str = "teacher",
@@ -168,7 +168,7 @@ class VLLMDivergence:
         sequential_models: bool = False,
         keep_only_teacher_correct: bool = True,
     ) -> Dict:
-        # analysis_text is the *reference* response we walk (e.g., teacher’s response)
+       
         token_ids = self.tokenizer.encode(analysis_text, add_special_tokens=False)
         tokens = [self.tokenizer.decode([tid]) for tid in token_ids]
 
@@ -351,7 +351,7 @@ def analyze_dataset_batch(
         print(f"Results saved to: {output_path}")
         print("="*80)
 
-    # Write high-divergence JSONL if requested
+
     if high_div_output:
         dirpath = os.path.dirname(high_div_output)
         if dirpath:

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Divergence Token Detection with vLLM: Base vs LoRA (Teacher)
 
 
-Example:
+
+How we ran this script
   python divergence_em_vllm.py \
     --dataset matboz/alpaca_Llama-3.1-8B-Instruct_em_paraphrased \
     --split train \

@@ -2,12 +2,7 @@
 """
 Finetune only on divergent tokens from a divergence dataset (LoRA + BitsAndBytes).
 
-Fixes included:
-- prepare_model_for_kbit_training + enable_input_require_grads
-- gradient_checkpointing with use_reentrant=False
-- remove_unused_columns=False
-- collator pads labels and guards against all-ignored batches
-- dataset filter ensures at least one supervised token after truncation
+
 """
 
 import argparse
